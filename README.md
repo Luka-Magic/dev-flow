@@ -1,0 +1,33 @@
+# dev-flow
+
+Claude Code 用のスキル集。計画 → 仕様 → チケット → テストレビュー → UI 確認 → 自律実装 → レビュー、
+という開発フローを、grill-visual の質問票を使って人間の承認点を挟みながら回す。
+
+| ディレクトリ | 役割 |
+|---|---|
+| `dev-flow/` | フロー全体の手順と運用ルール。`parallel/` に worktree + tmux の並列運用スクリプト |
+| `test-review/` | 実装前に受け入れテストケースを人間が承認し、`docs/test-cases/` に凍結する |
+| `ui-check/` | テスト承認後・実装前に画面のモックを確認する(UI に触れる変更のみ) |
+
+質問票の表示と回収は [grill-visual](https://github.com/Luka-Magic/grill-visual) が担う。
+
+## 使い方
+
+`~/.claude/skills/` からシンボリックリンクを張る。
+
+```bash
+git clone https://github.com/Luka-Magic/dev-flow ~/ai_agent/dev-flow
+for s in dev-flow test-review ui-check; do ln -s ~/ai_agent/dev-flow/$s ~/.claude/skills/$s; done
+```
+
+Claude Code で「フローで進めて」「テストレビューして」「UI 確認」と言えば各スキルが呼ばれる。
+
+## 設計の要点
+
+- /goal の自律実装ではテストが事実上の完了条件になる。だから「何をもって完成とするか」
+  (テストケース)だけは人間が握り、承認後は凍結する
+- 承認の単位はケースではなくルール(受け入れ基準)。人は「このルールで完成と言えるか」だけ読む
+- 画面の構造が論点になったら、議論を続けずに粗いモックを 2〜3 案作って質問票に埋め込む。
+  モックは使い捨てで、正は言葉(仕様)に置く
+
+背景と根拠は `docs/` の調査メモを参照。
