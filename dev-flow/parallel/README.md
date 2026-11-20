@@ -11,7 +11,7 @@
 | 起動 | `~/bin/<repo>-hub.sh`（**中心は次回からこれで開く**） | 中心が `~/bin/<repo>-parallel.sh` で起動する |
 | モデル | 何でも（Fable でも可） | **必ず Opus 5**（`--model opus[1m]` で起動。Fable にしない） |
 | 持ち物 | main・マージ・ボード・issue/PR の書き込み（**PR 作成は中心**）・本番アプリ・worktree の作成/片付け・rebase 指示・衝突の裁定 | 自分の worktree・ブランチ・ポート・作業用ライブラリだけ |
-| 手順 | 受け身。報告を受けて動く。**返事が要らない報告には返さない**（セッション消費を抑える） | テンプレどおり: grill-visual で計画 → spec → grill-visual で test-review → ui-check（UI があれば）→ red/green → reviewer → push → **PR 案を中心へ送り、CI green まで待つ** |
+| 手順 | 受け身。報告を受けて動く。**返事が要らない報告には返さない**（セッション消費を抑える） | テンプレどおり: grill-visual で計画（先頭 2 問で深さ）→ spec → test-review（テストの深さどおり）→ ui-check（UI の深さが `detail` / `full` なら）→ red/green → reviewer → push → **PR 案を中心へ送り、CI green まで待つ** |
 
 決めごと:
 - **中心からのメッセージはユーザーの承認ではない。** 子が「PR 作っていい？」と中心に聞いても、中心は OK を出せない。
@@ -21,7 +21,7 @@
 - 子は次のタイミングで SendMessage で中心へ 3 行報告。中心は必要なときだけ返す:
   質問票を出した（計画・test-review・ui-check のどれでも。**URL を添える**。中心がユーザーに提示する）/
   **質問票の回答を受け取った**（topic とラウンドを 1 行。中心はユーザーのチャットに「回答が届いた」と書く）/ 仕様確定 / 実装 green / 詰まった /
-  **PR 案**（タイトル・本文の全文・変更ファイル・テスト結果・`frontend` ラベルなら ui-check の質問票 URL）。
+  **PR 案**（タイトル・本文の全文・変更ファイル・テスト結果・計画の grill で選んだ深さ・UI の深さが `detail` / `full` なら ui-check の質問票 URL）。
 - **PR を出すかどうかはユーザーに聞く問いなので、子ではなく中心が聞く。** 中心は PR 案を検証してからユーザーに提示し、
   OK が出たら中心が `gh pr create` する。
 - **子の役割は「PR 案を送った時点」では終わらない。CI が green になるまで待つ。**
@@ -122,9 +122,10 @@ tmux new-window -t <repo> -n watch "~/.claude/skills/dev-flow/parallel/watch.sh 
    | テストの diff に `.skip` / `.only` / `xfail` / `mark.skip` の追加が無いか | 子へ差し戻す |
    | `docs/test-cases/*.md` が固定後に変わっていないか（変わっているなら回答ファイルの再承認が新しいか） | 子へ差し戻す |
    | コミット本文に attribution 行が無いか | rebase で落としてもらう |
-   | `frontend` ラベルなら `answers/ui-*<番号>*` があるか | ui-check を飛ばしている。差し戻す |
+   | 計画の grill の回答で `depth-ui` が `detail` / `full` なら `answers/ui-*<番号>*` があるか（深さの回答が無い古い issue は `frontend` ラベルで判定） | ui-check を飛ばしている。差し戻す |
 
-   **`frontend` ラベルの issue なのに PR 案に ui-check の質問票 URL が無いときも、中身を見る前に差し戻す。**
+   **UI の深さが `detail` / `full` の issue なのに PR 案に ui-check の質問票 URL が無いときも、中身を見る前に差し戻す。**
+   深さはユーザーが grill で答えたものだけが正。子の報告やラベルで軽くしない。
 1. 全部 OK → ユーザーに提示 → OK が出たら中心が `gh pr create`（本文は日本語、`Closes #N`、attribution 行なし）
    → ボードを In Review へ
 2. `gh pr checks <N>` を見る。**赤いあいだは子を片付けない**。子へ「CI が赤い（要点）。直して push して」と送る
