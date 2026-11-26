@@ -49,6 +49,6 @@ AI の自律実装(/goal)では、テストが事実上の完了条件になる�
 - [references/depth.md](references/depth.md): 深さの 2 問、選択肢ごとのフロー、推奨の目安、ラウンドの組み方
 - [references/mock-in-plan.md](references/mock-in-plan.md): 計画の grill にモックを埋め込む段階と見せ方
 - [references/pre-implementation-brief.md](references/pre-implementation-brief.md): 実装前の説明文書の中身と回答欄
-- [parallel/README.md](parallel/README.md): worktree と tmux で複数 issue を同時に進める運用
+- [parallel/README.md](parallel/README.md): worktree と tmux で複数 issue を同時に進める運用(強制の仕組みは parallel/enforcement.md)
 - `docs/2026-10-17-research-test-review-and-mocks.md`(このリポジトリ): ルール単位のテストレビューと、早いモックの根拠
 - `~/projects/playground/reports/2026-09-21-test-review-research.md`: テストレビューが要る理由(reward hacking の実証データ)
