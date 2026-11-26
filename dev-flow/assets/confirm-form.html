@@ -1,0 +1,59 @@
+<!--
+  実装前の説明(/html)の末尾に貼る「これで良いか」の回答欄。
+  data-topic と data-round を書き換えて使う(topic は plan-<チケットslug>、round は 1 から)。
+  grill-visual のサーバーから配信したときだけ送信できる(POST /submit → answers/<topic>-round-<N>.json)。
+-->
+<style>
+  .dc-confirm { border: 1px solid var(--mb-ink, #111); background: #fff; padding: 24px; margin-top: 32px; }
+  .dc-confirm label { display: block; margin: 8px 0; cursor: pointer; }
+  .dc-confirm textarea { display: block; width: 100%; box-sizing: border-box; min-height: 6em; margin: 12px 0;
+    padding: 8px; border: 1px solid var(--mb-ink, #111); border-radius: 0; font: inherit; }
+  .dc-confirm button { padding: 8px 20px; border: 1px solid var(--mb-ink, #111); border-radius: 0;
+    background: var(--mb-ink, #111); color: #fff; font: inherit; cursor: pointer; }
+  .dc-confirm button:disabled { opacity: 0.5; cursor: default; }
+</style>
+<section class="dc-confirm" id="confirm" data-topic="plan-REPLACE-ME" data-round="1">
+  <h2>これで進めてよいですか</h2>
+  <p>上の内容で実装に入ります。直したい点があれば「直す」を選び、何をどう直すかを書いてください。</p>
+  <label><input type="radio" name="dc-confirm" value="ok" checked> このまま進める</label>
+  <label><input type="radio" name="dc-confirm" value="fix"> 直す(下に書く)</label>
+  <textarea id="dc-confirm-note" placeholder="直したい点・気になる点(任意)"></textarea>
+  <button type="button" id="dc-confirm-send">送信する</button>
+  <p id="dc-confirm-status" role="status"></p>
+</section>
+<script>
+(() => {
+  const box = document.getElementById("confirm");
+  const button = document.getElementById("dc-confirm-send");
+  const status = document.getElementById("dc-confirm-status");
+  button.addEventListener("click", async () => {
+    const choice = box.querySelector('input[name="dc-confirm"]:checked').value;
+    const note = document.getElementById("dc-confirm-note").value.trim();
+    if (choice === "fix" && !note) {
+      status.textContent = "「直す」のときは、直したい点を書いてください。";
+      return;
+    }
+    button.disabled = true;
+    status.textContent = "送信しています…";
+    const body = {
+      topic: box.dataset.topic,
+      round: Number(box.dataset.round),
+      answers: { confirm: [choice] },
+      notes: note ? { confirm: note } : {},
+      free_text: "",
+    };
+    try {
+      const res = await fetch("/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      status.textContent = "送信しました。チャットに戻って待ってください。";
+    } catch (error) {
+      button.disabled = false;
+      status.textContent = "送信できませんでした(" + error.message + ")。質問票のサーバーから開いているか確かめて、もう一度送ってください。";
+    }
+  });
+})();
+</script>

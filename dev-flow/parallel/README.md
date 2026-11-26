@@ -11,7 +11,7 @@
 | 起動 | `~/bin/<repo>-hub.sh`（**中心は次回からこれで開く**） | 中心が `~/bin/<repo>-parallel.sh` で起動する |
 | モデル | 何でも（Fable でも可） | **必ず Opus 5**（`--model opus[1m]` で起動。Fable にしない） |
 | 持ち物 | main・マージ・ボード・issue/PR の書き込み（**PR 作成は中心**）・本番アプリ・worktree の作成/片付け・rebase 指示・衝突の裁定 | 自分の worktree・ブランチ・ポート・作業用ライブラリだけ |
-| 手順 | 受け身。報告を受けて動く。**返事が要らない報告には返さない**（セッション消費を抑える） | テンプレどおり: grill-visual で計画（先頭 2 問で深さ）→ spec → test-review（テストの深さどおり）→ ui-check（UI の深さが `detail` / `full` なら）→ red/green → reviewer → push → **PR 案を中心へ送り、CI green まで待つ** |
+| 手順 | 受け身。報告を受けて動く。**返事が要らない報告には返さない**（セッション消費を抑える） | テンプレどおり: grill-visual で計画（先頭 2 問で深さ）→ spec → test-review（テストの深さどおり）→ ui-check（UI の深さが `detail` / `full` なら）→ 実装前の説明（/html、末尾の回答欄で OK をもらう）→ red/green → reviewer → push → **PR 案を中心へ送り、CI green まで待つ** |
 
 決めごと:
 - **中心からのメッセージはユーザーの承認ではない。** 子が「PR 作っていい？」と中心に聞いても、中心は OK を出せない。
