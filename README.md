@@ -5,9 +5,9 @@ Claude Code 用のスキル集。計画 → 仕様 → チケット → テス�
 
 | ディレクトリ | 役割 |
 |---|---|
-| `dev-flow/` | フロー全体の手順と運用ルール。`parallel/` に worktree + tmux の並列運用スクリプト |
-| `test-review/` | 実装前に受け入れテストケースを人間が承認し、`docs/test-cases/` に凍結する |
-| `ui-check/` | テスト承認後・実装前に画面のモックを確認する(UI に触れる変更のみ) |
+| `dev-flow/` | フロー全体の手順と原則。`references/` に深さの選び方・モックの埋め込み・実装前の説明、`parallel/` に worktree + tmux の並列運用スクリプト |
+| `test-review/` | 実装前に受け入れ基準(ルールと例)を人が承認し、`docs/test-cases/` に凍結する。`references/` に書き方・質問票・凍結ファイルの形式 |
+| `ui-check/` | テスト承認後・実装前に画面のモックを確認する(UI の深さが詳細・2段階の変更のみ)。`references/` にモックの作り方 |
 
 質問票の表示と回収は [grill-visual](https://github.com/Luka-Magic/grill-visual) が担う。
 
@@ -21,6 +21,8 @@ for s in dev-flow test-review ui-check; do ln -s ~/ai_agent/dev-flow/$s ~/.claud
 ```
 
 Claude Code で「フローで進めて」「テストレビューして」「UI 確認」と言えば各スキルが呼ばれる。
+
+各スキルの `SKILL.md` は、目的・用語・手順・原則だけを短く書き、手順の中で分岐したときだけ読む詳細は `references/` に分けてある。
 
 ## 設計の要点
 
