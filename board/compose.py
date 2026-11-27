@@ -153,13 +153,23 @@ def build_tab(project: str, rs: list[dict], notes: list[str] | None = None) -> d
     }
 
 
-def other_sessions(data: dict, shown: set[str], usage_by_sid: dict[str, dict]) -> list[dict]:
-    """表に出ていない、生きているセッション(中心やほかの作業)。"""
+OTHERS_TOP = 3  # 上の帯に名前を出す数
+
+
+def other_sessions(data: dict, shown: set[str], usage_by_sid: dict[str, dict]) -> dict | None:
+    """表に出ていない、生きているセッションのうち、使用量の値があるもの。
+
+    上の帯には件数と、使用率の高い順に 3 件までを出し、残りは「ほか n 件」にまとめる。
+    値が 1 件も無ければ None(帯にこの欄を出さない)。
+    """
     now = data["now"]
     out = []
     for s in alive_sessions(data):
         view = sessions.session_view(s, now)
         if view["session_id"] in shown:
+            continue
+        context = usage.context_of(usage_by_sid.get(view["session_id"]), now)
+        if context is None:
             continue
         where = sessions.locate(s.get("cwd", ""), data.get("projects", {}))
         out.append({
@@ -167,9 +177,18 @@ def other_sessions(data: dict, shown: set[str], usage_by_sid: dict[str, dict]) -
             "project": where[0] if where else None,
             "state": view["state"],
             "label": view["label"],
-            "context": usage.context_of(usage_by_sid.get(view["session_id"]), now),
+            "context": context,
         })
-    return sorted(out, key=lambda x: x["name"])
+    if not out:
+        return None
+    ordered = sorted(out, key=lambda x: (-x["context"]["pct"], x["name"]))
+    rest = ordered[OTHERS_TOP:]
+    return {
+        "count": len(ordered),
+        "top": ordered[:OTHERS_TOP],
+        "rest": rest,
+        "rest_label": f"ほか {len(rest)} 件" if rest else None,
+    }
 
 
 def compose(data: dict) -> dict:

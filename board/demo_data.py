@@ -159,11 +159,15 @@ def sessions_and_usage(root: Path) -> None:
         sess("sample_app_hub", f"{WORK}/sample_app", "idle", 2),
         sess("notes-8", f"{WORK}/notes_site/.claude/worktrees/8-tags", "idle", 44),
         sess("scratch", f"{WORK}/scratch", "busy", 0),
+        sess("notes_site_hub", f"{WORK}/notes_site", "idle", 30),
+        sess("reading-notes", f"{WORK}/reading", "idle", 120),
+        sess("quick-fix", f"{WORK}/scratch2", "idle", 15),
+        sess("no-usage", f"{WORK}/scratch3", "idle", 5),
     ]
     for d in docs:
         write_json(root / "sessions" / f"{d['sessionId']}.json", d)
     pcts = {"sample-35": 44, "sample-49": 72, "sample-52": 12, "sample-fix-readme": 21, "sample_app_hub": 35,
-            "notes-8": 58, "scratch": 71}
+            "notes-8": 58, "scratch": 71, "notes_site_hub": 18, "reading-notes": 64, "quick-fix": 9}
     for i, (name, pct) in enumerate(pcts.items()):
         write_json(root / "devflow" / "usage" / f"demo-{name}.json", {
             "written_at": NOW - (i + 1) * 60, "session_id": f"demo-{name}",

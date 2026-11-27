@@ -68,9 +68,17 @@ def resets_text(value: object, now: float) -> str:
     return hm if ts - now < 86400 else f"{WEEKDAYS[lt.tm_wday]} {hm}"
 
 
+def _has_limit_values(doc: dict) -> bool:
+    """利用枠の値(5 時間か週の used_percentage)が 1 つでもある書き出しか。"""
+    parts = doc.get("rate_limits")
+    return isinstance(parts, dict) and any(
+        isinstance(parts.get(k), dict) and _num(parts[k].get("used_percentage")) is not None for k in LIMIT_KEYS)
+
+
 def limits(usage: list[dict], now: float) -> dict | None:
-    """R10: 利用枠は最も新しい書き出しの値を使う(終了したセッションの書き出しでもよい)。"""
-    with_limits = [d for d in usage if isinstance(d.get("rate_limits"), dict)]
+    """R10: 利用枠は、値のある書き出しのうち最も新しいものを使う(終了したセッションの書き出しでもよい)。
+    値が 1 つも無ければ None(画面は「利用枠: 未取得」を 1 つだけ出す)。"""
+    with_limits = [d for d in usage if _has_limit_values(d)]
     if not with_limits:
         return None
     doc = max(with_limits, key=_written)
