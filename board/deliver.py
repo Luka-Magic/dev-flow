@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import threading
 from collections.abc import Callable
@@ -52,6 +53,18 @@ class PaneSender(Sender, Protocol):
     def pane_text(self, target: str) -> str: ...
 
 
+MODEL_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:\[\]-]{0,79}")
+
+
+def resolve_model(explicit: object = None, conf: dict | None = None) -> str:
+    """配達係のモデル: 引数 → BOARD_COURIER_MODEL → 設定の courier_model → sonnet。
+    名前の規則に合わない値(空白だけ、- で始まるなど)は飛ばす。"""
+    for value in (explicit, os.environ.get("BOARD_COURIER_MODEL"), (conf or {}).get("courier_model")):
+        if isinstance(value, str) and MODEL_RE.fullmatch(value.strip()):
+            return value.strip()
+    return DEFAULT_COURIER_MODEL
+
+
 def clean_text(text: str) -> str:
     """1 行にして長さを抑える(改行は tmux では送信の Enter になってしまうため)。"""
     line = " ".join(str(text).split())
@@ -67,14 +80,13 @@ class Courier:
                  model: str | None = None):
         self.runner = runner
         self.claude = claude or os.environ.get("BOARD_CLAUDE", "claude")
-        # モデル: 引数 → BOARD_COURIER_MODEL → sonnet(server.py は環境変数 → 設定の courier_model の順で渡す)
-        self.model = model or os.environ.get("BOARD_COURIER_MODEL") or DEFAULT_COURIER_MODEL
+        self.model = resolve_model(model)
         self.timeout = timeout
         self._slots = threading.BoundedSemaphore(COURIER_PARALLEL)
 
     def command(self, name: str, text: str) -> list[str]:
         prompt = COURIER_PROMPT.format(name=name, text=clean_text(text))
-        return [self.claude, "-p", prompt, "--model", self.model, "--allowedTools", COURIER_TOOLS]
+        return [self.claude, "-p", prompt, f"--model={self.model}", "--allowedTools", COURIER_TOOLS]
 
     def send(self, target: str, text: str) -> Result:
         if not self._slots.acquire(blocking=False):

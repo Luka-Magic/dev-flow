@@ -44,6 +44,12 @@ LOOPBACK_NAMES = frozenset({"127.0.0.1", "localhost", "[::1]"})
 GRILL_PREFIX = "/grill/"
 GRILL_PASSTHROUGH = ("/submit", "/api/chat")  # 質問票の JS が絶対パスで叩くもの
 PROXY_TIMEOUT = 30
+UI_COMMENTS_OVERLAY = "/ui-comments/overlay.js"
+UI_COMMENTS_API = "/api/threads"
+UI_COMMENTS_PROJECT = os.environ.get("BOARD_UI_COMMENTS_PROJECT") or "devflow-board"
+if not records.KEY_RE.fullmatch(UI_COMMENTS_PROJECT):  # HTML の属性に入るので、キーの規則に合うものだけ
+    UI_COMMENTS_PROJECT = "devflow-board"
+DEFAULT_UI_COMMENTS_PORT = 4321  # 4319 は RoomLab、4320 は grill-visual のお試し用が使う
 
 
 @dataclass
@@ -55,6 +61,7 @@ class App:
     tmux: Any = None                # deliver.PaneSender
     grill_url: str = DEFAULT_GRILL_URL
     allowed_hosts: frozenset[str] = field(default_factory=frozenset)
+    ui_comments_port: int | None = None  # ui-comments の専用サーバー。None なら差し込みも中継もしない
 
 
 class HttpError(Exception):
@@ -107,9 +114,11 @@ class Handler(BaseHTTPRequestHandler):
         if name not in LOOPBACK_NAMES and name not in self.app.allowed_hosts:
             raise HttpError(403, "この名前では開けない(設定の allowed_hosts に足す)")
 
-    def _check_post(self) -> None:
+    def _check_post(self, allow_empty: bool = False) -> None:
+        """書き込みの要求: 本文は JSON だけ(allow_empty なら本文なしも可)、Origin は同じ出所だけ。"""
         ctype = self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
-        if ctype != "application/json":
+        empty = (self.headers.get("Content-Length") or "0").strip() == "0"
+        if ctype != "application/json" and not (allow_empty and empty):
             raise HttpError(415, "JSON だけを受け付ける")
         origin = self.headers.get("Origin")
         if not origin or urlsplit(origin).netloc.lower() != self.headers.get("Host", "").strip().lower():
@@ -139,10 +148,13 @@ class Handler(BaseHTTPRequestHandler):
         path = self.path.split("?", 1)[0]
         try:
             self._check_host()
-            if self.command == "POST":
-                self._check_post()
+            ui_comments = self._is_ui_comments(path)
+            if self.command in ("POST", "PATCH", "DELETE"):
+                self._check_post(allow_empty=ui_comments)  # ui-comments は本文なしの POST・DELETE を使う
             handler = routes.get(path)
-            if handler is None and (path.startswith(GRILL_PREFIX) or path in GRILL_PASSTHROUGH):
+            if handler is None and ui_comments:
+                handler = self._proxy_ui_comments
+            elif handler is None and (path.startswith(GRILL_PREFIX) or path in GRILL_PASSTHROUGH):
                 handler = self._proxy_grill
             if handler is None:
                 raise HttpError(404, "見つからない")
@@ -164,6 +176,12 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         self._dispatch({"/api/send": self._post_send, "/api/approve": self._post_approve})
 
+    def do_PATCH(self) -> None:
+        self._dispatch({})  # ui-comments の中継だけ
+
+    def do_DELETE(self) -> None:
+        self._dispatch({})
+
     # ---------------------------------------------------------------- 画面と表
 
     def _page(self) -> None:
@@ -171,6 +189,8 @@ class Handler(BaseHTTPRequestHandler):
             body = PAGE.read_bytes()
         except OSError as exc:
             raise HttpError(500, "board.html が無い") from exc
+        if self.app.ui_comments_port is not None:  # 差し込むのは board の画面だけ(中継する質問票には入れない)
+            body = inject_before_body_end(body, ui_comments_tag(UI_COMMENTS_PROJECT))
         self._send(200, body, "text/html; charset=utf-8")
 
     def _inputs(self) -> dict:
@@ -209,20 +229,34 @@ class Handler(BaseHTTPRequestHandler):
     def _proxy_grill(self) -> None:
         """grill-visual へそのまま渡す(/grill/<path> は /<path> に、/submit と /api/chat は同じパスに)。"""
         target = self.path[len(GRILL_PREFIX) - 1:] if self.path.startswith(GRILL_PREFIX) else self.path
-        if ".." in target.split("?", 1)[0].split("/"):
-            raise HttpError(400, "パスに .. は使えない")
         if self.command not in ("GET", "HEAD", "POST"):
             raise HttpError(405, "使えないメソッド")
-        body = self._read_body() if self.command == "POST" else None
-        headers = {"Content-Type": self.headers.get("Content-Type", "application/json")} if body is not None else {}
         url = urlsplit(self.app.grill_url)
-        conn = http.client.HTTPConnection(url.hostname or "127.0.0.1", url.port or 80, timeout=PROXY_TIMEOUT)
+        self._relay(url.hostname or "127.0.0.1", url.port or 80, target, "質問票のサーバー(grill-visual)が動いていない")
+
+    def _is_ui_comments(self, path: str) -> bool:
+        if self.app.ui_comments_port is None:
+            return False  # 無効のときは中継しない(/api/threads は 404 になる)
+        return path in (UI_COMMENTS_OVERLAY, UI_COMMENTS_API) or path.startswith(UI_COMMENTS_API + "/")
+
+    def _proxy_ui_comments(self) -> None:
+        """ui-comments の専用サーバーへ渡す。Host は 127.0.0.1、Origin は渡さない
+        (出所の確かめは board が済ませた。tailnet の名前ごしでも専用サーバーに断られないように)。"""
+        target = "/overlay.js" if self.path.split("?", 1)[0] == UI_COMMENTS_OVERLAY else self.path
+        self._relay("127.0.0.1", self.app.ui_comments_port, target, "ui-comments の専用サーバーが動いていない")
+
+    def _relay(self, host: str, port: int, target: str, down_message: str) -> None:
+        if ".." in target.split("?", 1)[0].split("/"):
+            raise HttpError(400, "パスに .. は使えない")
+        body = self._read_body() if self.command in ("POST", "PATCH", "DELETE") else None
+        headers = {"Content-Type": self.headers.get("Content-Type") or "application/json"} if body else {}
+        conn = http.client.HTTPConnection(host, port, timeout=PROXY_TIMEOUT)
         try:
-            conn.request(self.command, target, body=body, headers=headers)
+            conn.request(self.command, target, body=body if body else None, headers=headers)
             res = conn.getresponse()
             data = res.read()
         except OSError as exc:
-            raise HttpError(502, "質問票のサーバー(grill-visual)が動いていない") from exc
+            raise HttpError(502, down_message) from exc
         finally:
             conn.close()
         self._send(res.status, data, res.getheader("Content-Type", "application/octet-stream"))
@@ -232,6 +266,17 @@ class Handler(BaseHTTPRequestHandler):
 
     def log_error(self, fmt: str, *args) -> None:
         print(f"[{time.strftime('%Y-%m-%dT%H:%M:%S')}] {fmt % args}", file=sys.stderr, flush=True)
+
+
+def ui_comments_tag(project: str) -> str:
+    return f'<script src="{UI_COMMENTS_OVERLAY}" data-project="{project}" defer></script>\n'
+
+
+def inject_before_body_end(html: bytes, snippet: str) -> bytes:
+    """</body> の直前に snippet を入れる。</body> が無ければ末尾に足す。"""
+    data = snippet.encode("utf-8")
+    i = html.rfind(b"</body>")
+    return html + data if i < 0 else html[:i] + data + html[i:]
 
 
 def _keys(doc: dict) -> tuple[str, str]:
@@ -258,12 +303,6 @@ def _hub_target(data: dict, project: str) -> dict | None:
     return {"name": name, "tmux": pane}
 
 
-def courier_model(conf: dict) -> str | None:
-    """配達係のモデル: BOARD_COURIER_MODEL → 設定の courier_model → None(Courier の既定 sonnet)。"""
-    value = os.environ.get("BOARD_COURIER_MODEL") or conf.get("courier_model")
-    return value.strip() if isinstance(value, str) and value.strip() else None
-
-
 def make_server(app: App, port: int) -> ThreadingHTTPServer:
     """127.0.0.1 だけで待ち受ける。port=0 で空きポート(テスト用)。"""
     return ThreadingHTTPServer((BIND, port), functools.partial(Handler, app=app))
@@ -272,7 +311,7 @@ def make_server(app: App, port: int) -> ThreadingHTTPServer:
 def main() -> None:
     import collect
     import config
-    from deliver import Courier, TmuxSender
+    from deliver import Courier, TmuxSender, resolve_model
 
     root = records.resolve_root()
     conf = config.load_config()
@@ -284,11 +323,13 @@ def main() -> None:
     app = App(
         root=root,
         collector=collect.Collector(root, grill_url, pane_reader=tmux.pane_text if tmux else None),
-        courier=None if os.environ.get("BOARD_NO_COURIER") else Courier(model=courier_model(conf)),
+        courier=None if os.environ.get("BOARD_NO_COURIER") else Courier(model=resolve_model(None, conf)),
         tmux=tmux,
         grill_url=grill_url,
         allowed_hosts=frozenset(str(h).strip().lower() for h in [*hosts, *env_hosts]),
     )
+    if os.environ.get("BOARD_UI_COMMENTS") == "1":  # ui-comments を差し込む(serve.sh / demo.sh が専用サーバーも起こす)
+        app.ui_comments_port = int(os.environ.get("BOARD_UI_COMMENTS_PORT") or DEFAULT_UI_COMMENTS_PORT)
     port = int(os.environ.get("BOARD_PORT") or DEFAULT_PORT)
     make_server(app, port).serve_forever()
 

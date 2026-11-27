@@ -18,10 +18,9 @@ import sys
 
 sys.path.insert(0, sys.argv[1])
 import config  # noqa: E402
-from deliver import Courier  # noqa: E402
-from server import courier_model  # noqa: E402
+from deliver import Courier, resolve_model  # noqa: E402
 
-courier = Courier(model=courier_model(config.load_config()))
+courier = Courier(model=resolve_model(None, config.load_config()))
 print(f"配達係のモデル: {courier.model}")
 result = courier.send(os.environ["TARGET"], os.environ["TEXT"])
 if result.delivered:

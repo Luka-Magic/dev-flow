@@ -91,7 +91,19 @@ def test_courier_uses_sonnet_by_default_and_can_be_changed(monkeypatch):
     monkeypatch.setenv("BOARD_COURIER_MODEL", "opus")
     by_env = deliver.Courier(claude="claude-fake").command("demo-5", "a")
 
-    assert default[default.index("--model") + 1] == "sonnet"
-    assert chosen[chosen.index("--model") + 1] == "haiku"
-    assert by_env[by_env.index("--model") + 1] == "opus"
+    assert "--model=sonnet" in default
+    assert "--model=haiku" in chosen
+    assert "--model=opus" in by_env
     assert default[:2] == ["claude-fake", "-p"] and "--allowedTools" in default
+
+
+def test_courier_model_order_and_bad_values_fall_back(monkeypatch):
+    import deliver
+
+    monkeypatch.delenv("BOARD_COURIER_MODEL", raising=False)
+    assert deliver.resolve_model(None, {"courier_model": "haiku"}) == "haiku"
+    monkeypatch.setenv("BOARD_COURIER_MODEL", "opus")
+    assert deliver.resolve_model(None, {"courier_model": "haiku"}) == "opus"
+    monkeypatch.setenv("BOARD_COURIER_MODEL", "   ")
+    assert deliver.resolve_model(None, {"courier_model": "--dangerous"}) == "sonnet"
+    assert deliver.resolve_model("-x") == "sonnet"
