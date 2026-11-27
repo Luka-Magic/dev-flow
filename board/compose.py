@@ -14,6 +14,7 @@ from __future__ import annotations
 import time
 
 import detail
+import hub
 import records
 import rows
 import sessions
@@ -35,6 +36,8 @@ def _gather(data: dict) -> dict[tuple[str, str], Topic]:
         return t
 
     for (project, key), lines in sorted(data.get("records", {}).items()):
+        if key == hub.HUB_KEY:  # 中心の記録は行にしない(中心の 1 行に出す)
+            continue
         issue = rows.record_issue(key, lines)
         t = get(project, str(issue) if issue else key, issue)
         t.records.extend(lines)
@@ -150,6 +153,7 @@ def build_tab(project: str, rs: list[dict], notes: list[str] | None = None) -> d
         "my_turn": sum(1 for r in ordered if r["my_turn"]),
         "counts": counts,
         "notes": notes or [],
+        "hub": None,  # 設定のあるプロジェクトだけ、compose が中心の 1 行を入れる
     }
 
 
@@ -198,13 +202,24 @@ def compose(data: dict) -> dict:
     usage_by_sid = usage.latest_by_session(usage_docs)
     by_project: dict[str, list[dict]] = {p: [] for p in data.get("projects", {})}
     shown: set[str] = set()
-    for (project, _), t in topics.items():
-        by_project.setdefault(project, []).append(build_row(t, usage_by_sid, now, data.get("grill_base", "/grill/")))
-        shown.update(s["session_id"] for s in t.sessions[:1])
     configured = data.get("projects", {})
+    for (project, _), t in topics.items():
+        row = build_row(t, usage_by_sid, now, data.get("grill_base", "/grill/"))
+        row["child_start"] = hub.child_button(row, configured.get(project), data.get("worktrees", {}).get(project, []),
+                                              hub.is_starting(data, project, now, row["issue"]))
+        by_project.setdefault(project, []).append(row)
+        shown.update(s["session_id"] for s in t.sessions[:1])
     names = sorted(p for p, rs in by_project.items()
                    if p != OTHER and (p in configured or any(r["status"] != "done" for r in rs)))
     tabs = [build_tab(p, by_project[p], tab_notes(p, data)) for p in names]
+    alive = alive_sessions(data)
+    grill_base = data.get("grill_base", "/grill/")
+    for tab in tabs:
+        conf = configured.get(tab["project"])
+        tab["hub"] = hub.hub_view(tab["project"], conf, data, alive,
+                                  lambda t: build_row(t, usage_by_sid, now, grill_base)) if conf is not None else None
+        if tab["hub"] and tab["hub"]["row"]["session"]:
+            shown.add(tab["hub"]["row"]["session"]["session_id"])
     if by_project.get(OTHER):
         tabs.append(build_tab(OTHER, by_project[OTHER]))
     return {

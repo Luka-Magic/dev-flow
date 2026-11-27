@@ -50,11 +50,25 @@ def history_text(line: dict) -> str | None:
         return f"{DRAFT_KINDS[kind]}: {line.get('title', '')}"
     if kind == "approve":
         return f"承認した: {line.get('title') or line.get('draft_id', '')}"
+    if kind == "start":
+        return start_text(line)
     if kind == "sent":
         how = {"courier": "配達係で届いた", "tmux": "tmux で届いた"}.get(str(line.get("via")))
         tail = how or f"届かなかった: {line.get('error', '')}"
         return f"送った: {line.get('text', '')}({tail})"
     return None
+
+
+def start_text(line: dict) -> str:
+    """開始の記録: 中心を始めた / 子を始めた(どこから)。断られたときは理由の 1 行目を添える。"""
+    who = f"{line['by']} から" if line.get("by") else ""
+    what = "子" if line.get("what") == "child" else "中心"
+    arg = f": {line['arg']}" if line.get("arg") else ""
+    if line.get("ok") is False:
+        reason = (str(line.get("error") or line.get("output_tail") or "").strip().splitlines() or [""])[0]
+        detail = "、".join(x for x in (who, reason) if x)
+        return f"{what}を始められなかった{arg}" + (f"({detail})" if detail else "")
+    return f"{what}を始めた{arg}" + (f"({who})" if who else "")
 
 
 def history(lines: list[dict]) -> list[dict]:
