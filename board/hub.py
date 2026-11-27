@@ -40,6 +40,13 @@ def is_starting(data: dict, project: str, now: float, what: object = "hub") -> b
     return isinstance(started, (int, float)) and now - started < STARTING_SECONDS
 
 
+def root_note(project: str, conf: dict, name: str | None, alive: list[dict], projects: dict) -> str | None:
+    """中心がいないのに、本体のフォルダで別の名前のセッションが動いているとき(名前を付け忘れた中心かもしれない)。"""
+    others = [s.get("name") or str(s.get("sessionId", ""))[:8] for s in alive
+              if s.get("name") != name and sessions.locate(s.get("cwd", ""), projects) == (project, None, None)]
+    return f"本体のフォルダで別の名前のセッションが動いている: {'、'.join(others)}" if others else None
+
+
 def start_button(project: str, conf: dict, running: bool, starting: bool) -> dict | None:
     """「中心を始める」ボタン。中心が動いていれば出さない(None)。押せないときは理由を添える。"""
     if running:
@@ -72,6 +79,7 @@ def hub_view(project: str, conf: dict, data: dict, alive: list[dict], build_row:
         state, label = "absent", "いない"
     session = tmux_session(project, conf)
     return {
+        "note": root_note(project, conf, name, alive, data.get("projects", {})) if view is None else None,
         "name": name,
         "state": state,
         "label": label,

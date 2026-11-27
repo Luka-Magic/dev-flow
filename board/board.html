@@ -741,7 +741,7 @@ td.c-ctx { width: 88px; }
     var b = $("hub-start");
     b.hidden = !h.start;
     b.disabled = !h.start || !h.start.enabled || !!hubBusy[tab.project];
-    $("hub-why").textContent = h.start && h.start.reason ? h.start.reason : "";
+    $("hub-why").textContent = [h.start && h.start.reason, h.note].filter(Boolean).join(" / ");
   }
   function startHub() {
     var tab = tabOf(currentTab);

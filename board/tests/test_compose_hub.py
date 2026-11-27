@@ -111,3 +111,13 @@ def test_refused_child_start_shows_the_first_line_of_the_reason_in_history():
     text = find_row(compose.compose(data), "demo", "53")["history"][0]["text"]
 
     assert text == "子を始められなかった: 53-column-width(board から、子の上限 3 を超えます。)"
+
+
+def test_other_sessions_in_the_project_root_are_noted_next_to_the_start_button():
+    data = inputs(projects={"demo": PROJECT}, sessions=[session("demo-0d", "/work/demo"),
+                                                       session("child", "/work/demo/.claude/worktrees/5-x")])
+
+    hub = _hub(compose.compose(data))
+
+    assert hub["start"]["enabled"] is True
+    assert hub["note"] == "本体のフォルダで別の名前のセッションが動いている: demo-0d"
