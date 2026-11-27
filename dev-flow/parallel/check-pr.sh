@@ -9,7 +9,8 @@
 #   3 テストケース   … docs/test-cases/*.md が固定後に変わっていないか
 #                      （変わっているなら answers/tr-*.json の再承認がその変更より新しいか）
 #   4 attribution    … コミット本文に Co-Authored-By / Claude-Session / Generated with [Claude Code] が無いか
-#   5 UI 確認        … issue 番号があり frontend ラベルが付いていれば answers/ui-*<番号>* があるか
+#   5 UI 確認        … 計画の grill の回答で depth-ui が detail / full なら answers/ui-*<番号>* があるか
+#                      （深さの回答が無い古い issue は frontend ラベルで判定）
 #
 # 環境変数: CHECK_PR_BASE（既定 origin/main）、ANSWERS_DIR（既定 ~/.agent/diagrams/answers）
 set -uo pipefail
@@ -118,22 +119,73 @@ else
   bad "4 attribution" "コミット本文に $(head -1 <<<"$attr" | cut -c1-60) がある。rebase で落としてもらう"
 fi
 
-# --- 5 frontend ラベルなら ui-check の回答があるか
+# --- 5 UI 確認: 計画の grill で選んだ UI の深さ（depth-ui）で要否を決める
+# 計画の grill の回答のうち、topic に issue 番号を含み（<project>-<番号>-… / <番号>-…）、
+# depth-ui を答えた最新のものを読む。tr-* / ui-* の回答は対象外。値は none / detail / full。
+depth_ui() {
+  python3 - "$ANSWERS" "$1" <<'PY'
+import glob, json, os, re, sys
+answers_dir, issue = sys.argv[1], sys.argv[2]
+pat = re.compile(r'(^|-)' + re.escape(issue) + r'-')
+best = None
+for path in glob.glob(os.path.join(answers_dir, '*-round-*.json')):
+    name = os.path.basename(path)
+    if name.startswith(('tr-', 'ui-')):
+        continue
+    try:
+        with open(path, encoding='utf-8') as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        continue
+    topic = data.get('topic') or name.rsplit('-round-', 1)[0]
+    value = (data.get('answers') or {}).get('depth-ui')
+    if not pat.search(topic) or not isinstance(value, list) or not value:
+        continue
+    mtime = os.path.getmtime(path)
+    if best is None or mtime > best[0]:
+        best = (mtime, str(value[0]), name)
+if best:
+    print(best[1] + ' ' + best[2])
+PY
+}
+
+ui_answer_for() {
+  local a
+  for a in "$ANSWERS"/ui-*"$1"*; do [[ -e "$a" ]] && { basename "$a"; return; }; done
+}
+
 if [[ -z "$ISSUE" ]]; then
   okay "5 UI 確認" "issue 番号の指定なし（省略）"
 else
-  labels="$( (cd "$ROOT" && gh issue view "$ISSUE" --json labels --jq '.labels[].name') 2>/dev/null || true)"
-  if [[ -z "$labels" ]]; then
-    say "5 UI 確認" "不明 — gh issue view #$ISSUE が読めなかった（ラベルを手で確かめる）"
-  elif ! grep -qx 'frontend' <<<"$labels"; then
-    okay "5 UI 確認" "frontend ラベルなし（不要）"
+  read -r depth depth_file <<<"$(depth_ui "$ISSUE")"
+  if [[ -n "${depth:-}" ]]; then
+    case "$depth" in
+      none)
+        okay "5 UI 確認" "grill で UI の深さ「なし」（$depth_file）。不要" ;;
+      detail|full)
+        hit="$(ui_answer_for "$ISSUE")"
+        if [[ -n "$hit" ]]; then
+          okay "5 UI 確認" "UI の深さ「$depth」。$hit がある"
+        else
+          bad "5 UI 確認" "grill で UI の深さ「$depth」（$depth_file）なのに $ANSWERS/ui-*$ISSUE* が無い。ui-check を飛ばしている。子へ差し戻す"
+        fi ;;
+      *)
+        bad "5 UI 確認" "depth-ui の値「$depth」が想定外（none / detail / full）。$depth_file を手で確かめる" ;;
+    esac
   else
-    hit=""
-    for a in "$ANSWERS"/ui-*"$ISSUE"*; do [[ -e "$a" ]] && hit="$a" && break; done
-    if [[ -n "$hit" ]]; then
-      okay "5 UI 確認" "$(basename "$hit") がある"
+    # 深さを決める前に始めた issue: 従来どおり frontend ラベルで判定する
+    labels="$( (cd "$ROOT" && gh issue view "$ISSUE" --json labels --jq '.labels[].name') 2>/dev/null || true)"
+    if [[ -z "$labels" ]]; then
+      say "5 UI 確認" "不明 — 深さの回答が無く、gh issue view #$ISSUE も読めなかった（手で確かめる）"
+    elif ! grep -qx 'frontend' <<<"$labels"; then
+      okay "5 UI 確認" "深さの回答なし・frontend ラベルなし（不要）"
     else
-      bad "5 UI 確認" "frontend ラベルなのに $ANSWERS/ui-*$ISSUE* が無い。ui-check を飛ばしている。子へ差し戻す"
+      hit="$(ui_answer_for "$ISSUE")"
+      if [[ -n "$hit" ]]; then
+        okay "5 UI 確認" "深さの回答なし・frontend ラベル。$hit がある"
+      else
+        bad "5 UI 確認" "深さの回答が無く frontend ラベルなのに $ANSWERS/ui-*$ISSUE* が無い。ui-check を飛ばしている。子へ差し戻す"
+      fi
     fi
   fi
 fi

@@ -1,72 +1,54 @@
 ---
 name: dev-flow
-description: 計画→仕様→チケット→テストレビュー→自律実装(/goal)→レビューの開発フロー。新機能や大きめの変更を始めるとき、「フローで進めて」「dev-flow で」で使用。grill は grill-visual の質問票で行う。
+description: 新機能や大きめの変更を、計画 → 仕様 → チケット → テストレビュー → UI 確認 → 実装前の説明 → 自律実装 → レビューの順で進める開発フロー。「フローで進めて」「dev-flow で」で使う。計画の最初に UI モックとテストレビューの深さを選ぶので、小さな変更も同じ入口から軽く通せる。
 ---
 
-# Dev Flow — テストレビューを要にした開発フロー
+# dev-flow
 
-Matt Pocock スキル + テストレビュー + /goal を
-grill-visual ベースに置き換えたもの。設計思想は 1 つ:
-**/goal ループではテストが事実上の完了条件になるので、
-「何をもって完成とするか」だけは人間が握る**。コードは全読みしなくても、
-完了条件(テストケース)は人間がレビューする。
+新機能や大きめの変更を、「何をもって完成とするか」を人が決めてから実装に入る開発フローである。
+AI の自律実装(/goal)では、テストが事実上の完了条件になる。だから完了条件(ルールと例)だけは人がレビューし、コードは全部読まなくてよい。この考え方で全体を組んである。
 
-## ステップ
+## 用語
 
-1. **計画** — grill-visual スキルで問い詰める(grill-with-docs 相当)。質問票の JSON に
-   `"kind": "計画"` を書く(統合ページの絞り込み用)。
-   CONTEXT.md / ADR が必要な題材は domain-modeling の規律に従う。
-2. **仕様化** — 会話を spec に合成する(mattpocock の to-spec 準拠)。
-   このとき **テストする seam(公開境界)を必ず人間と合意する**。
-   seam は既存優先・できるだけ高い位置・数は最少(理想は 1)。
-3. **チケット分割** — tracer bullet の縦切りで分割(to-tickets 準拠)。
-   - git リポジトリ: issue 化し、衝突しない範囲で worktree 並列も可
-     (複数 issue を同時に走らせるなら下の「並列運用」)
-   - 非 git(playground 等): `<app>/docs/tickets/NN-<slug>.md` に 1 チケット 1 ファイル
-4. **テストレビュー** — チケットごとに、実装前に **test-review スキル**を実行。
-   自然言語のテストケース一覧 → grill-visual 質問票で人間が承認 →
-   `docs/test-cases/` に固定化。ここがフローの要。省略しない。
-5. **UI 確認（UI に触れる変更のみ）** — **ui-check スキル**。承認済みテストケースを画面の形にした
-   HTML モックを grill-visual で 1 画面 1 問で確認。「直す」が出たら仕様 → 影響するテストケースの
-   再承認 → モック再提示、を両方が採用になるまで繰り返してから実装に入る。
-6. **自律実装** — test-review が出力する /goal テンプレで実行。
-   実装は **1 ケースずつ red → green**(tdd スキル準拠)。
-   承認済み一覧があってもテストコードの一括先行生成はしない
-   (horizontal slicing。Pocock / t-wada 両系譜のアンチパターン)。
-7. **レビュー** — 優先順: ①テストファイルの diff(skip・削除・
-   アサーション弱体化がないか) → ②承認リストとの突合(全ケース実装済みか)
-   → ③code-review スキル。git なら PR、人間が承認してマージ。
+- **grill**: 計画を問い詰める質問票。grill-visual スキルでブラウザに出し、回答を自動で回収する。
+- **深さ**: この題材で UI モックとテストレビューをどこまでやるか。計画の最初の 2 問で選ぶ([references/depth.md](references/depth.md))。
+- **seam**: テストが叩く公開境界。HTTP の入口、CLI、公開関数など。
+- **ルールと例**: 受け入れ基準の形。ルールは 1 行の業務ルール、例はそれを示す具体的なテストケース。test-review スキルが作る。
+- **凍結**: 承認済みのルールと例を `docs/test-cases/<slug>.md` に保存し、実装中は編集しないこと。
 
-## 運用ルール(ガードレール)
+## 手順
 
-- 承認済みテストケースファイル(`docs/test-cases/*.md`)は実装フェーズで
-  編集禁止。変更が必要になったら実装を止め、人間に差し戻して再承認を取る。
-- テストの skip / 削除 / アサーション弱体化は「完了」ではなく「失敗」。
-  /goal の完了条件文にもその旨を明記する(test-review のテンプレに含まれる)。
-- テスト実行はプロジェクトの規定に従う(playground 系は docker compose
-  コンテナ内で実行)。
-- 指示は否定形(「変えるな」)より許可リスト(「このファイルのみ編集可」)。
+各ステップは「終わり」の条件を満たしてから次へ進む。
 
-## 並列運用(worktree + tmux + 中心セッション)
+1. **計画**。grill-visual で問い詰める。質問票の JSON に `"kind": "計画"` を書く。ラウンド 1 の先頭 2 問で深さを選び、深さに関係なく聞ける問いを同じラウンドに続けて並べる(往復を減らすため)。画面の構造が論点になり、UI の深さが `full` なら、議論を続けずに粗いモックを質問票に埋め込む([references/mock-in-plan.md](references/mock-in-plan.md))。CONTEXT.md や ADR が要る題材は domain-modeling スキルの規律に従う。
+   終わり: 深さが決まり、決めることが尽きた。
+2. **仕様化**。会話を spec に合成する(mattpocock の to-spec 準拠)。seam を人と合意する。seam は既存のものを優先し、できるだけ高い位置に置き、数は最少(理想は 1)にする。モックで決まった画面一覧・遷移・必須項目は言葉で spec に書き、モックはリンクで添える。
+   終わり: spec と seam に人の OK がある。
+3. **チケット分割**。tracer bullet の縦切りで分ける(to-tickets 準拠)。git リポジトリなら issue にする。複数の issue を同時に走らせるなら [parallel/README.md](parallel/README.md) の運用に従う。git でない playground などは `<app>/docs/tickets/NN-<slug>.md` に 1 チケット 1 ファイルで置く。
+   終わり: チケットが縦切りで並び、順番が決まった。
+4. **テストレビュー**。チケットごとに、実装の前に test-review スキルを実行する。テストの深さが `full` のときのステップで、`light` と `none` の扱いは references/depth.md にある。
+   終わり: 全ルールが採用になり、凍結ファイルがある。
+5. **UI 確認**。UI の深さが `detail` か `full` のとき、ui-check スキルを実行する。計画で構造を見た画面は、テストレビューで仕様が変わったものだけ再提示する。「直す」が出たら、仕様 → 影響するルールと例の再承認 → モックの再提示、を両方が採用になるまで繰り返す。
+   終わり: 全画面が「このまま」になった。
+6. **実装前の説明**。どの深さでも行う。決めたことを html スキルで 1 枚の文書にし、末尾で「これで良いか」を聞く([references/pre-implementation-brief.md](references/pre-implementation-brief.md))。
+   終わり: 「このまま進める」の回答が届いた。
+7. **自律実装**。test-review が出す /goal テンプレで実行する。1 例ずつ red → green で進める(tdd スキル準拠)。承認済みの一覧があっても、テストコードは 1 例ずつ書く。テストを一括で先に生成する横切り(horizontal slicing)は、Pocock と t-wada の両系譜がアンチパターンとしている。
+   終わり: 全ルールの全例が green。
+8. **レビュー**。この順に見る。①テストファイルの diff(skip・削除・アサーションの弱体化がないか)。②凍結ファイルとの突合(全ルールの全例が実装されているか)。③code-review スキル。git なら PR を作り、人が承認してマージする。
+   終わり: マージされた。
 
-複数 issue を同時に進めるときは `parallel/README.md` の運用に従う。要点:
-- issue ごとに worktree と tmux 窓、**子セッションは必ず Opus 5**(`parallel/parallel.sh` が
-  `claude --model opus[1m]` で起動する)。中心セッション 1 つが main・マージ・ボード・本番を持つ
-- 子の動きはテンプレ: grill-visual で計画 → spec → grill-visual で test-review → ui-check（`frontend`
-  ラベルなら必須）→ red/green → reviewer → push → **PR 案を中心へ送り、CI green まで待つ**。
-  質問票の URL(render.py が印字する統合ページ URL `<root>#<topic>`)は出すたびに中心へ送る
-- **PR を出すかの問いはユーザーへの問いなので中心が聞き、中心が PR を作る。** 中心は先に
-  `parallel/check-pr.sh <repo> <branch> [issue番号]` で機械的に検証する。子の窓と worktree を片付けるのは
-  **CI が green になってから**。中心からのメッセージはユーザーの承認ではない
-- 承認済みテストケースの凍結はフックで強制されている。解除の鍵は grill-visual の回答ファイル
-  （`~/.agent/diagrams/answers/tr-<stem>-round-*.json` が最終コミットより新しいこと）。子は回答ファイルを書けない
-- 同時に動かす子は**既定 3 本まで**（`PARALLEL_MAX`）。枠が空いたら中心がボードの Todo の上から次を起動する
-- 子は区切りごとに中心へ 3 行報告。中心は返事が要るときだけ返す
-- **質問票の回答を受け取ったら、子は中心へ 1 行「回答を受け取った（topic・ラウンド）」を送る。中心はそれをユーザーのチャットに書く**
-  (ユーザーが「回答が届いたか」を中心で確かめられるようにする)
-- 起動・監視・マージ後の rebase 指示・片付けの手順とスクリプト: `parallel/`
+## 原則
 
-## 背景資料
+- 凍結ファイル(`docs/test-cases/*.md`)は実装中に編集しない。変更が要るときは実装を止め、人に差し戻して再承認を取る。
+- テストの skip・削除・アサーションの弱体化は「失敗」として扱う。/goal の完了条件文にもそう書く(test-review のテンプレに含まれる)。
+- テストの実行はプロジェクトの規定に従う(playground 系は docker compose のコンテナ内)。
+- 指示は許可リストで書く(「このファイルのみ編集可」)。禁止で書くより守られる。
 
-調査レポート: `~/projects/playground/reports/2026-09-21-test-review-research.md`
-(なぜテストレビューが要るか: reward hacking の実証データ、系譜、反対意見)
+## 参照
+
+- [references/depth.md](references/depth.md): 深さの 2 問、選択肢ごとのフロー、推奨の目安、ラウンドの組み方
+- [references/mock-in-plan.md](references/mock-in-plan.md): 計画の grill にモックを埋め込む段階と見せ方
+- [references/pre-implementation-brief.md](references/pre-implementation-brief.md): 実装前の説明文書の中身と回答欄
+- [parallel/README.md](parallel/README.md): worktree と tmux で複数 issue を同時に進める運用(強制の仕組みは parallel/enforcement.md)
+- `docs/2026-10-17-research-test-review-and-mocks.md`(このリポジトリ): ルール単位のテストレビューと、早いモックの根拠
+- `~/projects/playground/reports/2026-09-21-test-review-research.md`: テストレビューが要る理由(reward hacking の実証データ)
