@@ -71,6 +71,19 @@ button:disabled { cursor: not-allowed; color: var(--mute); }
 .chip[aria-pressed="true"] { background: var(--sel-bg); color: var(--text); border-color: var(--accent); }
 .note { font-size: var(--fs-s); color: var(--err); }
 
+/* ---- 中心の 1 行 ---- */
+#hubline { display: flex; align-items: center; gap: 12px; padding: 8px 16px; border-bottom: 1px solid var(--line); flex: none; flex-wrap: wrap; }
+#hubline[hidden], #hub-start[hidden] { display: none; }
+#hub-open { display: inline-flex; align-items: center; gap: 10px; min-height: 40px; padding: 4px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); cursor: pointer; text-align: left; min-width: 0; }
+#hub-open:hover { background: var(--hover); }
+#hub-open .who { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#hub-open .ses, #hub-open .ctx { font-size: var(--fs-s); white-space: nowrap; }
+#hub-open .ctx { color: var(--sub); }
+.ses.absent { color: var(--mute); } .ses.starting { color: var(--s-review); }
+.btn.big { min-height: 40px; padding: 8px 16px; font-size: var(--fs); }
+.btn:disabled, .btn.primary:disabled { background: var(--line); border-color: var(--line); color: var(--mute); cursor: not-allowed; opacity: 1; }
+.why { font-size: var(--fs-s); color: var(--sub); }
+
 /* ---- 表 ---- */
 #scroller { flex: 1 1 auto; min-height: 0; overflow: auto; }
 table { width: 100%; border-collapse: collapse; }
@@ -131,6 +144,17 @@ td.c-ctx { width: 88px; }
 #msg:focus { border-color: var(--accent); }
 #msg::placeholder { color: var(--mute); }
 #result { font-size: var(--fs-s); color: var(--sub); min-height: 1.5em; }
+.start-box { border-top: 1px solid var(--line); padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
+.start-box[hidden], #confirm[hidden], #start-out[hidden], #attach[hidden] { display: none; }
+.start-box .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+#slug { min-height: 40px; width: 16em; max-width: 100%; background: var(--input); border: 1px solid var(--field-line); border-radius: 6px; padding: 8px 12px; color: var(--text); font-family: var(--mono); }
+#slug:focus { border-color: var(--accent); }
+.kinds { display: inline-flex; gap: 12px; font-size: var(--fs-s); }
+.kinds label { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; cursor: pointer; }
+#confirm { border: 1px solid var(--accent); border-radius: 8px; padding: 12px; background: var(--sel-bg); display: flex; flex-direction: column; gap: 8px; }
+#start-out { white-space: pre-wrap; word-break: break-word; font-family: var(--mono); font-size: 12px; background: var(--input); border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; max-height: 180px; overflow: auto; }
+#start-out.err { border-color: var(--err); color: var(--err); }
+#attach code { font-family: var(--mono); font-size: 12.5px; background: var(--input); border: 1px solid var(--line); border-radius: 4px; padding: 2px 6px; user-select: all; }
 #result.err { color: var(--err); }
 #history, #artifacts { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-s); }
 #history li { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 8px; }
@@ -185,6 +209,11 @@ td.c-ctx { width: 88px; }
   <span class="right"><span class="lead">自分の番 <span class="badge num" id="turn-total">0</span></span><span id="updated" class="num" aria-live="polite"></span></span>
 </header>
 <nav id="tabs" role="tablist" aria-label="プロジェクト"></nav>
+<div id="hubline" hidden>
+  <button type="button" id="hub-open"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M12 3v6" /><path d="M12 15v6" /><path d="m4.2 7.5 5.2 3" /><path d="m14.6 13.5 5.2 3" /><path d="m4.2 16.5 5.2-3" /><path d="m14.6 10.5 5.2-3" /></svg><span class="who"></span><span class="ses"></span><span class="ctx num"></span></button>
+  <button type="button" class="btn primary big" id="hub-start" hidden><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3 20 12 6 21Z" /></svg><span>中心を始める</span></button>
+  <span class="why" id="hub-why"></span>
+</div>
 <div id="bar2">
   <button type="button" class="chip" data-status="active" aria-pressed="true">進行中 <span class="num" data-count="active">0</span></button>
   <button type="button" class="chip" data-status="todo" aria-pressed="true">未着手 <span class="num" data-count="todo">0</span></button>
@@ -224,6 +253,33 @@ td.c-ctx { width: 88px; }
         </div>
         <div class="row" id="draft-actions"></div>
         <p id="result" aria-live="polite"></p>
+      </div>
+      <div class="start-box" id="attach" hidden>
+        <span class="lab">中心の窓を開く</span>
+        <span><code id="attach-cmd"></code> の窓 <code id="attach-win"></code></span>
+      </div>
+      <div class="start-box" id="child-box" hidden>
+        <span class="lab">子を始める</span>
+        <div class="row">
+          <label for="slug" class="why">slug(英数字とハイフン)</label>
+          <input id="slug" type="text" inputmode="latin" autocomplete="off" spellcheck="false" placeholder="例: column-width">
+          <span class="kinds" role="radiogroup" aria-label="種類">
+            <label><input type="radio" name="kind" value="feat" checked>機能</label>
+            <label><input type="radio" name="kind" value="fix">修正</label>
+          </span>
+        </div>
+        <div class="row">
+          <button type="button" class="btn big" id="child-start"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3 20 12 6 21Z" /></svg><span>子を始める</span></button>
+          <span class="why" id="child-why"></span>
+        </div>
+        <div id="confirm" role="alertdialog" aria-labelledby="confirm-text" hidden>
+          <p id="confirm-text"></p>
+          <div class="row">
+            <button type="button" class="btn primary big" id="confirm-yes"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg><span>始める</span></button>
+            <button type="button" class="btn big" id="confirm-no"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg><span>やめる</span></button>
+          </div>
+        </div>
+        <pre id="start-out" aria-live="polite" hidden></pre>
       </div>
     </div>
     <div class="sh-right">
@@ -275,7 +331,10 @@ td.c-ctx { width: 88px; }
   function tabOf(key) { return (board.tabs || []).filter(function (t) { return tabKey(t) === key; })[0] || null; }
   function rowOf(id) {
     var found = null;
-    (board.tabs || []).forEach(function (t) { t.rows.forEach(function (r) { if (r.id === id) found = r; }); });
+    (board.tabs || []).forEach(function (t) {
+      t.rows.forEach(function (r) { if (r.id === id) found = r; });
+      if (t.hub && t.hub.row.id === id) found = t.hub.row;
+    });
     return found;
   }
 
@@ -434,7 +493,7 @@ td.c-ctx { width: 88px; }
     var r = openId && board ? rowOf(openId) : null;
     if (!r) return;
     $("sh-title").textContent = (r.project || "その他") + (r.issue != null ? " #" + r.issue : "") + "  " + r.title;
-    var meta = [r.stage_label];
+    var meta = r.is_hub ? [] : [r.stage_label];
     if (r.session) meta.push(r.session.label);
     if (r.context) meta.push("コンテキスト " + r.context.pct + "%(" + r.context.age_min + " 分前)");
     $("sh-meta").textContent = meta.join(" / ");
@@ -446,6 +505,7 @@ td.c-ctx { width: 88px; }
     var canSend = r.project !== null;
     $("send").disabled = !canSend;
     $("msg").disabled = !canSend;
+    renderStartBox(r);
     var acts = $("draft-actions");
     var key = (r.drafts || []).map(function (d) { return d.draft_id; }).join(",");
     if (acts.dataset.key !== key) {
@@ -492,7 +552,63 @@ td.c-ctx { width: 88px; }
     });
     if (!art.children.length) art.appendChild(el("li", "none", "まだありません"));
   }
-  var BEHIND = ["band", "tabs", "bar2", "scroller"];  // 枠を開いている間は操作できなくする(Tab で外へ出ない)
+  // ---------------------------------------------------------------- 枠の中: 中心の窓を開くコマンド・子を始める
+  function renderStartBox(r) {
+    var tab = tabOf(currentTab);
+    var attach = r.is_hub && tab && tab.hub ? tab.hub.attach : null;
+    $("attach").hidden = !attach;
+    if (attach) { $("attach-cmd").textContent = attach.command; $("attach-win").textContent = attach.window; }
+    var c = r.child_start;
+    var box = $("child-box");
+    box.hidden = !c;
+    if (!c) return;
+    var key = r.id;
+    if (box.dataset.key !== key) {  // 行を開いた最初だけ初期値を入れる(取り直しで入力中の文を消さない)
+      box.dataset.key = key;
+      $("slug").value = c.slug || "";
+      box.querySelector('input[value="' + (c.fix ? "fix" : "feat") + '"]').checked = true;
+      $("confirm").hidden = true;
+      $("start-out").hidden = true;
+    }
+    $("child-start").disabled = !c.enabled || childBusy;
+    $("child-why").textContent = c.reason || "";
+    $("confirm-text").textContent = c.confirm;
+  }
+  var childBusy = false;
+  function askChild() {
+    var r = rowOf(openId);
+    if (!r || !r.child_start || !r.child_start.enabled) return;
+    if (!$("slug").value.trim()) { showStartOut("slug を書いてください(英数字とハイフン)", true); $("slug").focus(); return; }
+    $("start-out").hidden = true;
+    $("confirm").hidden = false;
+    $("confirm-yes").focus();
+  }
+  function showStartOut(text, isErr) {
+    var o = $("start-out"); o.hidden = false; o.textContent = text; o.classList.toggle("err", !!isErr);
+  }
+  function startChild() {
+    var r = rowOf(openId);
+    if (!r || childBusy) return;
+    childBusy = true;
+    $("confirm").hidden = true;
+    $("child-start").disabled = true;
+    showStartOut("起動中");
+    var fix = document.querySelector('#child-box input[name="kind"]:checked').value === "fix";
+    post("/api/start", { project: r.project, kind: "child", issue: r.issue, slug: $("slug").value.trim(), fix: fix })
+      .then(function (x) {
+        var d = x.doc;
+        if (x.status !== 200) showStartOut("始められなかった: " + (d.error || x.status), true);
+        else showStartOut((d.ok ? "始めた(終了コード " : "断られた(終了コード ") + d.code + ")\n" + (d.output || ""), !d.ok);
+      }).catch(function () { showStartOut("始められなかった(サーバーにつながらない)", true); })
+      .then(function () { childBusy = false; fetchBoard(); });
+  }
+  $("hub-open").addEventListener("click", function () { if (this.dataset.id) openSheet(this.dataset.id); });
+  $("hub-start").addEventListener("click", startHub);
+  $("child-start").addEventListener("click", askChild);
+  $("confirm-yes").addEventListener("click", startChild);
+  $("confirm-no").addEventListener("click", function () { $("confirm").hidden = true; $("child-start").focus(); });
+
+  var BEHIND = ["band", "tabs", "hubline", "bar2", "scroller"];  // 枠を開いている間は操作できなくする(Tab で外へ出ない)
   function setBehindInert(on) {
     BEHIND.forEach(function (id) { if (on) $(id).setAttribute("inert", ""); else $(id).removeAttribute("inert"); });
   }
@@ -516,6 +632,7 @@ td.c-ctx { width: 88px; }
     // 表は取り直しのたびに描き直すので、要素ではなく行の id で元の行を探してフォーカスを戻す
     var tr = was ? document.querySelector('#rows tr[data-id="' + CSS.escape(was) + '"]') : null;
     if (tr) tr.focus();
+    else if (was && $("hub-open").dataset.id === was) $("hub-open").focus();
   }
   function sheetFocusables() {
     return Array.prototype.filter.call(
@@ -604,8 +721,40 @@ td.c-ctx { width: 88px; }
     renderTabs();
     var tab = currentTab === null ? null : tabOf(currentTab);
     if (!tab) { $("rows").textContent = ""; $("empty").hidden = false; return; }
+    renderHub(tab);
     renderRows(tab);
     scrollToFirstActive(tab);
+  }
+  // ---------------------------------------------------------------- 中心の 1 行(状態・ボタン・押せない理由は /api/board が決める)
+  var hubBusy = {};
+  function renderHub(tab) {
+    var h = tab.hub;
+    $("hubline").hidden = !h;
+    if (!h) return;
+    var open = $("hub-open");
+    open.dataset.id = h.row.id;
+    open.querySelector(".who").textContent = h.row.title;
+    var ses = open.querySelector(".ses");
+    ses.className = "ses " + h.state;
+    ses.textContent = h.label;
+    open.querySelector(".ctx").textContent = h.context ? "コンテキスト " + h.context.pct + "%" : "";
+    var b = $("hub-start");
+    b.hidden = !h.start;
+    b.disabled = !h.start || !h.start.enabled || !!hubBusy[tab.project];
+    $("hub-why").textContent = h.start && h.start.reason ? h.start.reason : "";
+  }
+  function startHub() {
+    var tab = tabOf(currentTab);
+    if (!tab || !tab.hub || !tab.hub.start || !tab.hub.start.enabled || hubBusy[tab.project]) return;
+    hubBusy[tab.project] = true;
+    $("hub-start").disabled = true;
+    $("hub-why").textContent = "起動中";
+    post("/api/start", { project: tab.project, kind: "hub" }).then(function (x) {
+      var d = x.doc;
+      $("hub-why").textContent = x.status === 200 && d.ok ? "起動した。" + d.attach.command + " の窓 " + d.attach.window
+        : "始められなかった: " + (d.error || d.output || x.status);
+    }).catch(function () { $("hub-why").textContent = "始められなかった(サーバーにつながらない)"; })
+      .then(function () { hubBusy[tab.project] = false; fetchBoard(); });
   }
   var lastText = "";
   function fetchBoard() {
