@@ -283,7 +283,7 @@ td.c-ctx { width: 88px; }
   function meter(id, part) {
     var m = $(id);
     m.querySelector(".fill").style.transform = "scaleX(" + (part ? Math.min(part.pct, 100) / 100 : 0) + ")";
-    m.querySelector(".pct").textContent = part ? part.pct + "%" : "なし";
+    m.querySelector(".pct").textContent = part ? part.pct + "%" : "未取得";
     m.querySelector(".when").textContent = part && part.resets_text ? part.resets_text + " に戻る" : "";
   }
   function sessionText(s) { return s.name + " " + s.context.pct + "%(" + s.context.age_min + " 分前)"; }
@@ -534,6 +534,13 @@ td.c-ctx { width: 88px; }
   function escToClose(e) {
     if (e.key === "Escape" && !e.isComposing && e.keyCode !== 229 && !e.defaultPrevented && openId) closeSheet();
   }
+  // 文字を打つ欄か(ラジオやチェックボックスは文字が消えないので含めない)
+  function isTextEntry(t) {
+    if (!t || !t.closest) return false;
+    if (t.closest("textarea, select, [contenteditable='true'], [contenteditable='']")) return true;
+    var input = t.closest("input");
+    return !!input && !/^(radio|checkbox|button|submit|reset|range|color|file|image)$/i.test(input.type || "text");
+  }
   // 質問票は board と同じ出所(/grill/ の中継)なので、中の文書にも Esc の受け口を付けられる。
   // 外の出所のページは触れないので、そのときは「閉じる」ボタンで閉じる
   $("frame").addEventListener("load", function () {
@@ -546,7 +553,7 @@ td.c-ctx { width: 88px; }
           // 質問票の入力欄(メモ・チャット・選択)で押した Esc と、拡大した画像を開いているときの Esc は質問票のもの。
           // 枠を閉じると未送信の入力が消えるので、そのときは閉じない(欄の外へ出てから Esc、または「閉じる」)
           var t = e.target;
-          if (t && t.closest && t.closest("input, textarea, select, [contenteditable='true'], [contenteditable='']")) return;
+          if (isTextEntry(t)) return;
           if (doc.querySelector("#lightbox.show")) return;
           setTimeout(function () { escToClose(e); }, 0);
         });

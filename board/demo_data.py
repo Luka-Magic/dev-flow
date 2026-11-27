@@ -107,6 +107,7 @@ button:focus-visible{{outline:2px solid #e27a52;outline-offset:2px}}img{{max-wid
 <label><input type="radio" name="q1" value="a" checked> 1 冊のブック</label>
 <label><input type="radio" name="q1" value="b"> シートごとのファイル</label>
 <img src="assets/{topic}/fig.svg" alt="見本の図"></div>
+<label>メモ <textarea id="memo" rows="2" style="width:100%"></textarea></label>
 <button id="go" type="button">送信</button> <span id="st"></span>
 <script>document.getElementById("go").onclick=function(){{fetch("/submit",{{method:"POST",headers:{{"Content-Type":"application/json"}},
 body:JSON.stringify({{topic:"{topic}",round:1,answers:{{q1:document.querySelector("input:checked").value}}}})}})
