@@ -520,7 +520,7 @@ td.c-ctx { width: 88px; }
   function sheetFocusables() {
     return Array.prototype.filter.call(
       $("sheet").querySelectorAll("button, a[href], textarea, input, iframe:not([hidden]), [tabindex]:not([tabindex='-1'])"),
-      function (e) { return !e.disabled && e.offsetParent !== null; });
+      function (e) { return !e.disabled && e.getClientRects().length > 0; });
   }
   function trapTab(e) {
     if (!openId || e.key !== "Tab") return;
@@ -537,11 +537,19 @@ td.c-ctx { width: 88px; }
   // 質問票は board と同じ出所(/grill/ の中継)なので、中の文書にも Esc の受け口を付けられる。
   // 外の出所のページは触れないので、そのときは「閉じる」ボタンで閉じる
   $("frame").addEventListener("load", function () {
+    if (!frameUrl || frameUrl.indexOf("/grill/") !== 0) return;  // 受け口を付けるのは中継している質問票だけ
     try {
       var doc = $("frame").contentDocument;
       if (doc && !doc.__boardEsc) {
         doc.__boardEsc = true;
-        doc.addEventListener("keydown", function (e) { setTimeout(function () { escToClose(e); }, 0); });
+        doc.addEventListener("keydown", function (e) {
+          // 質問票の入力欄(メモ・チャット・選択)で押した Esc と、拡大した画像を開いているときの Esc は質問票のもの。
+          // 枠を閉じると未送信の入力が消えるので、そのときは閉じない(欄の外へ出てから Esc、または「閉じる」)
+          var t = e.target;
+          if (t && t.closest && t.closest("input, textarea, select, [contenteditable='true'], [contenteditable='']")) return;
+          if (doc.querySelector("#lightbox.show")) return;
+          setTimeout(function () { escToClose(e); }, 0);
+        });
       }
     } catch (err) { /* 別の出所: 受け口を付けない */ }
   });
