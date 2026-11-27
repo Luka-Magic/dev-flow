@@ -258,6 +258,12 @@ def _hub_target(data: dict, project: str) -> dict | None:
     return {"name": name, "tmux": pane}
 
 
+def courier_model(conf: dict) -> str | None:
+    """配達係のモデル: BOARD_COURIER_MODEL → 設定の courier_model → None(Courier の既定 haiku)。"""
+    value = os.environ.get("BOARD_COURIER_MODEL") or conf.get("courier_model")
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
 def make_server(app: App, port: int) -> ThreadingHTTPServer:
     """127.0.0.1 だけで待ち受ける。port=0 で空きポート(テスト用)。"""
     return ThreadingHTTPServer((BIND, port), functools.partial(Handler, app=app))
@@ -278,7 +284,7 @@ def main() -> None:
     app = App(
         root=root,
         collector=collect.Collector(root, grill_url, pane_reader=tmux.pane_text if tmux else None),
-        courier=None if os.environ.get("BOARD_NO_COURIER") else Courier(),
+        courier=None if os.environ.get("BOARD_NO_COURIER") else Courier(model=courier_model(conf)),
         tmux=tmux,
         grill_url=grill_url,
         allowed_hosts=frozenset(str(h).strip().lower() for h in [*hosts, *env_hosts]),

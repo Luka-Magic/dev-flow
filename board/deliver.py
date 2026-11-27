@@ -19,6 +19,7 @@ from sessions import pane_state, valid_pane
 MAX_TEXT = 2000
 COURIER_TIMEOUT = 180
 COURIER_TOOLS = "ListAgents,SendMessage"
+DEFAULT_COURIER_MODEL = "haiku"  # 1 行を届けるだけなので、いちばん小さいモデル
 COURIER_PARALLEL = 2  # 同時に起動する配達係の上限(連打で claude -p が増えないように)
 COURIER_PROMPT = """あなたは配達係です。次の 1 件を届けたら終わります。
 1. ListAgents で、名前が「{name}」のセッションを探す。
@@ -62,15 +63,18 @@ def clean_text(text: str) -> str:
 class Courier:
     """配達係。`claude -p` を 1 回起動して、宛先へ SendMessage させる。"""
 
-    def __init__(self, runner: Runner = subprocess.run, claude: str | None = None, timeout: int = COURIER_TIMEOUT):
+    def __init__(self, runner: Runner = subprocess.run, claude: str | None = None, timeout: int = COURIER_TIMEOUT,
+                 model: str | None = None):
         self.runner = runner
         self.claude = claude or os.environ.get("BOARD_CLAUDE", "claude")
+        # モデル: 引数 → BOARD_COURIER_MODEL → haiku(server.py は環境変数 → 設定の courier_model の順で渡す)
+        self.model = model or os.environ.get("BOARD_COURIER_MODEL") or DEFAULT_COURIER_MODEL
         self.timeout = timeout
         self._slots = threading.BoundedSemaphore(COURIER_PARALLEL)
 
     def command(self, name: str, text: str) -> list[str]:
         prompt = COURIER_PROMPT.format(name=name, text=clean_text(text))
-        return [self.claude, "-p", prompt, "--allowedTools", COURIER_TOOLS]
+        return [self.claude, "-p", prompt, "--model", self.model, "--allowedTools", COURIER_TOOLS]
 
     def send(self, target: str, text: str) -> Result:
         if not self._slots.acquire(blocking=False):

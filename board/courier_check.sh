@@ -17,9 +17,13 @@ import os
 import sys
 
 sys.path.insert(0, sys.argv[1])
+import config  # noqa: E402
 from deliver import Courier  # noqa: E402
+from server import courier_model  # noqa: E402
 
-result = Courier().send(os.environ["TARGET"], os.environ["TEXT"])
+courier = Courier(model=courier_model(config.load_config()))
+print(f"配達係のモデル: {courier.model}")
+result = courier.send(os.environ["TARGET"], os.environ["TEXT"])
 if result.delivered:
     print(f"届いた(配達係)。宛先の窓で、試験の 1 行が届いたか・保留されていないかを見る: {os.environ['TARGET']}")
 else:

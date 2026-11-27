@@ -85,7 +85,8 @@ flow step 計画 --title "README の誤字を直す"      # issue の無い題�
   },
   "wrapper_glob": "~/bin/*-parallel.sh",
   "allowed_hosts": ["<Tailscale の名前>"],
-  "grill_url": "http://127.0.0.1:8787"
+  "grill_url": "http://127.0.0.1:8787",
+  "courier_model": "haiku"
 }
 ```
 
@@ -95,6 +96,8 @@ flow step 計画 --title "README の誤字を直す"      # issue の無い題�
 - `path` はセッションの作業フォルダからプロジェクトと題材を見分けるのと、`gh` を動かす場所に使う。
 - `hub` は承認を知らせる中心のセッションの名前。`repo` があれば `gh -R <repo>` で読む。
 - `github: false` なら `gh` を動かさない。
+- `courier_model` は配達係の `claude -p` に渡すモデル。既定は `haiku`(1 行を届けるだけなので、いちばん小さいモデル)。
+  環境変数 `BOARD_COURIER_MODEL` があれば、そちらが優先する。
 
 環境変数: `BOARD_PORT` `BOARD_ROOT` `BOARD_CONFIG` `BOARD_GRILL_URL` `BOARD_SESSIONS_DIR`(既定 `~/.claude/sessions`)
 `BOARD_ALLOWED_HOSTS`(カンマ区切り)。
@@ -129,7 +132,8 @@ flow step 計画 --title "README の誤字を直す"      # issue の無い題�
 1. 配達係: `claude -p` の使い捨てセッションが `ListAgents` で宛先を探し、`SendMessage` で 1 回送る。
 2. 配達係が失敗したら、tmux の窓へ文字を打ち込む。確認の選択肢が出ている窓には送らない。
 
-配達係が実物で届くかは、まだ試していない。人が次の手順で試す。
+配達係は人が実物で試し、2 つのセッションで届くことを確かめた(止まっていた相手が起きた。1 件 約 11 秒)。
+配達係が本線、tmux は予備。試し直すときは次の手順で行う。
 
 ```bash
 board/courier_check.sh <宛先のセッション名>
