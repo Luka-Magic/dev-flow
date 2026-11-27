@@ -537,7 +537,7 @@ td.c-ctx { width: 88px; }
   // 文字を打つ欄か(ラジオやチェックボックスは文字が消えないので含めない)
   function isTextEntry(t) {
     if (!t || !t.closest) return false;
-    if (t.closest("textarea, select, [contenteditable='true'], [contenteditable='']")) return true;
+    if (t.isContentEditable || t.closest("textarea, select")) return true;
     var input = t.closest("input");
     return !!input && !/^(radio|checkbox|button|submit|reset|range|color|file|image)$/i.test(input.type || "text");
   }
@@ -554,7 +554,7 @@ td.c-ctx { width: 88px; }
           // 枠を閉じると未送信の入力が消えるので、そのときは閉じない(欄の外へ出てから Esc、または「閉じる」)
           var t = e.target;
           if (isTextEntry(t)) return;
-          if (doc.querySelector("#lightbox.show")) return;
+          if (doc.querySelector("#lightbox.show")) return;  // grill-visual の render.py の拡大画像(id="lightbox"、開くと .show)
           setTimeout(function () { escToClose(e); }, 0);
         });
       }

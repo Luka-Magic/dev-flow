@@ -15,6 +15,8 @@ LOG="$DIR/.server.log"
 up() { timeout 2 curl -fsS -o /dev/null "http://127.0.0.1:$PORT/overlay.js" 2>/dev/null; }
 port_pid() { ss -ltnp "sport = :$PORT" 2>/dev/null | grep -o 'pid=[0-9]*' | head -1 | cut -d= -f2; }
 
+case "${1:-}" in --stop|"") ;; *) echo "使い方: $0 [--stop]" >&2; exit 2 ;; esac
+case "$PORT" in ''|*[!0-9]*) echo "ERROR: BOARD_UI_COMMENTS_PORT が数でない: $PORT" >&2; exit 1 ;; esac
 if [ "${1:-}" = "--stop" ]; then
   pid="$(port_pid)"
   if [ -n "$pid" ] && up; then kill "$pid" && echo "stopped: ui-comments(pid $pid)"; else echo "not running: ui-comments"; fi
@@ -27,6 +29,9 @@ if [ ! -f "$SRC" ] || ! command -v node >/dev/null; then
   exit 1
 fi
 mkdir -p "$DIR"
+exec 9>"$DIR/.start.lock"
+flock 9   # serve.sh と demo.sh を同時に起こしても 1 つだけ起動する
+if up; then echo "already running: ui-comments http://127.0.0.1:$PORT/"; exit 0; fi
 # 道具は「直接実行されたか」を実ファイルのパスで判定するので、リンクを解決してから渡す
 setsid nohup node "$(readlink -f "$SRC")" --dir "$DIR" --port "$PORT" >>"$LOG" 2>&1 </dev/null &
 for _ in 1 2 3 4 5 6 7 8 9 10; do

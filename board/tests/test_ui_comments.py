@@ -130,3 +130,14 @@ def test_enabled_still_refuses_other_origins(servers):
 
     assert (status, patched) == (403, 403)
     assert FakeUiComments.seen == []
+
+
+def test_chunked_body_and_writes_to_overlay_are_refused(servers):
+    port = servers(True)
+    origin = {"Origin": f"http://127.0.0.1:{port}"}
+
+    chunked = request(port, "POST", "/api/threads/t1/seen", None, {**origin, "Transfer-Encoding": "chunked"})[0]
+    overlay = request(port, "POST", "/ui-comments/overlay.js", {"x": 1}, origin)[0]
+
+    assert (chunked, overlay) == (400, 405)
+    assert FakeUiComments.seen == []

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # board を http://127.0.0.1:8792/ で動かす(冪等)。ループバック限定で、外へは公開しない。
 #   board/serve.sh             # 動いていなければ起動する
-#   board/serve.sh --restart   # 止めて起動し直す(server.py などを直したあと。board.html は再起動不要)
+#   board/serve.sh --restart   # 止めて起動し直す(server.py などを直したあと。board.html は再起動不要。ui-comments は止めない)
 #   board/serve.sh --stop      # 止める
 # ポートは BOARD_PORT(既定 8792)、記録の置き場所は BOARD_ROOT(既定 ~/.agent/devflow)。
 # BOARD_UI_COMMENTS=1 なら、画面に ui-comments を差し込み、専用サーバー(ui_comments.sh、既定 4321)も起こす。
@@ -32,7 +32,11 @@ case "${1:-}" in
   *) echo "使い方: $0 [--restart|--stop]" >&2; exit 2 ;;
 esac
 
-if [ "${BOARD_UI_COMMENTS:-}" = "1" ]; then "$HERE/ui_comments.sh" || exit 1; fi
+# 専用サーバーを起こせなければ、ui-comments を外して board だけ起こす(補助の失敗で本体を止めない)
+if [ "${BOARD_UI_COMMENTS:-}" = "1" ] && ! "$HERE/ui_comments.sh"; then
+  echo "WARN: ui-comments を起こせないので、差し込まずに起動する" >&2
+  export BOARD_UI_COMMENTS=0
+fi
 
 if is_board; then echo "already running: $URL"; exit 0; fi
 if [ -n "$(port_pid)" ]; then

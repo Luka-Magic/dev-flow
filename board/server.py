@@ -48,6 +48,8 @@ UI_COMMENTS_OVERLAY = "/ui-comments/overlay.js"
 UI_COMMENTS_API = "/api/threads"
 UI_COMMENTS_PROJECT = os.environ.get("BOARD_UI_COMMENTS_PROJECT") or "devflow-board"
 if not records.KEY_RE.fullmatch(UI_COMMENTS_PROJECT):  # HTML の属性に入るので、キーの規則に合うものだけ
+    print(f"board: BOARD_UI_COMMENTS_PROJECT が規則に合わないので devflow-board を使う: {UI_COMMENTS_PROJECT!r}",
+          file=sys.stderr)
     UI_COMMENTS_PROJECT = "devflow-board"
 DEFAULT_UI_COMMENTS_PORT = 4321  # 4319 は RoomLab、4320 は grill-visual のお試し用が使う
 
@@ -148,6 +150,8 @@ class Handler(BaseHTTPRequestHandler):
         path = self.path.split("?", 1)[0]
         try:
             self._check_host()
+            if self.headers.get("Transfer-Encoding"):  # 本文は Content-Length で受ける(chunked は読まない)
+                raise HttpError(400, "Transfer-Encoding は受け付けない")
             ui_comments = self._is_ui_comments(path)
             if self.command in ("POST", "PATCH", "DELETE"):
                 self._check_post(allow_empty=ui_comments)  # ui-comments は本文なしの POST・DELETE を使う
@@ -242,7 +246,10 @@ class Handler(BaseHTTPRequestHandler):
     def _proxy_ui_comments(self) -> None:
         """ui-comments の専用サーバーへ渡す。Host は 127.0.0.1、Origin は渡さない
         (出所の確かめは board が済ませた。tailnet の名前ごしでも専用サーバーに断られないように)。"""
-        target = "/overlay.js" if self.path.split("?", 1)[0] == UI_COMMENTS_OVERLAY else self.path
+        is_overlay = self.path.split("?", 1)[0] == UI_COMMENTS_OVERLAY
+        if is_overlay and self.command not in ("GET", "HEAD"):
+            raise HttpError(405, "使えないメソッド")
+        target = "/overlay.js" if is_overlay else self.path
         self._relay("127.0.0.1", self.app.ui_comments_port, target, "ui-comments の専用サーバーが動いていない")
 
     def _relay(self, host: str, port: int, target: str, down_message: str) -> None:
@@ -266,6 +273,17 @@ class Handler(BaseHTTPRequestHandler):
 
     def log_error(self, fmt: str, *args) -> None:
         print(f"[{time.strftime('%Y-%m-%dT%H:%M:%S')}] {fmt % args}", file=sys.stderr, flush=True)
+
+
+def ui_comments_port(raw: str | None, board_port: int) -> int:
+    """専用サーバーのポート。数でない・範囲外・board 自身と同じなら起動をやめる(自分へ中継し続けないように)。"""
+    try:
+        value = int(raw) if raw else DEFAULT_UI_COMMENTS_PORT
+    except ValueError:
+        sys.exit(f"board: BOARD_UI_COMMENTS_PORT が数でない: {raw!r}")
+    if not 1 <= value <= 65535 or value == board_port:
+        sys.exit(f"board: BOARD_UI_COMMENTS_PORT が使えない値: {value}")
+    return value
 
 
 def ui_comments_tag(project: str) -> str:
@@ -328,9 +346,9 @@ def main() -> None:
         grill_url=grill_url,
         allowed_hosts=frozenset(str(h).strip().lower() for h in [*hosts, *env_hosts]),
     )
-    if os.environ.get("BOARD_UI_COMMENTS") == "1":  # ui-comments を差し込む(serve.sh / demo.sh が専用サーバーも起こす)
-        app.ui_comments_port = int(os.environ.get("BOARD_UI_COMMENTS_PORT") or DEFAULT_UI_COMMENTS_PORT)
     port = int(os.environ.get("BOARD_PORT") or DEFAULT_PORT)
+    if os.environ.get("BOARD_UI_COMMENTS") == "1":  # ui-comments を差し込む(serve.sh / demo.sh が専用サーバーも起こす)
+        app.ui_comments_port = ui_comments_port(os.environ.get("BOARD_UI_COMMENTS_PORT"), port)
     make_server(app, port).serve_forever()
 
 

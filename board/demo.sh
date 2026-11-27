@@ -14,7 +14,10 @@ cleanup() { for p in "${pids[@]}"; do kill "$p" 2>/dev/null || true; done; rm -r
 trap cleanup EXIT INT TERM
 
 python3 "$HERE/demo_data.py" "$DIR" >/dev/null
-if [ "${BOARD_UI_COMMENTS:-}" = "1" ]; then "$HERE/ui_comments.sh"; fi
+if [ "${BOARD_UI_COMMENTS:-}" = "1" ] && ! "$HERE/ui_comments.sh"; then
+  echo "WARN: ui-comments を起こせないので、差し込まずに起動する" >&2
+  export BOARD_UI_COMMENTS=0
+fi
 python3 "$HERE/demo_grill.py" "$DIR/grill" "$GRILL_PORT" & pids+=($!)
 BOARD_ROOT="$DIR/devflow" BOARD_SESSIONS_DIR="$DIR/sessions" BOARD_CONFIG="$DIR/config.json" \
 BOARD_GH_FIXTURE="$DIR/gh.json" BOARD_GRILL_URL="http://127.0.0.1:$GRILL_PORT" BOARD_PORT="$PORT" \
