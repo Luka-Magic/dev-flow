@@ -16,6 +16,16 @@ AI の自律実装(/goal)では、テストが事実上の完了条件になる�
 - **ルールと例**: 受け入れ基準の形。ルールは 1 行の業務ルール、例はそれを示す具体的なテストケース。test-review スキルが作る。
 - **凍結**: 承認済みのルールと例を `docs/test-cases/<slug>.md` に保存し、実装中は編集しないこと。
 
+## フローに乗せない変更
+
+切るほどでもなく、すぐ取りかかれる変更は、チケットにもフローにも乗せず、その場で進める。
+当たるのは、差分を 1 文で説明でき、決めることが残っておらず、すぐ取り消せる変更である(誤字、文言、名前の変更、1 か所の設定値など)。
+
+- 始める前に、ユーザーに一言で確認する(「これはチケットにせず、今やります。よいですか」)。
+- 作業が設計の判断や頼まれていない機能に広がったら止め、チケットにするかをユーザーに聞く。
+
+条件と git の扱いは [references/ticket-size.md](references/ticket-size.md) にある。
+
 ## 手順
 
 各ステップは「終わり」の条件を満たしてから次へ進む。
@@ -24,8 +34,8 @@ AI の自律実装(/goal)では、テストが事実上の完了条件になる�
    終わり: 深さが決まり、決めることが尽きた。
 2. **仕様化**。会話を spec に合成する(mattpocock の to-spec 準拠)。seam を人と合意する。seam は既存のものを優先し、できるだけ高い位置に置き、数は最少(理想は 1)にする。モックで決まった画面一覧・遷移・必須項目は言葉で spec に書き、モックはリンクで添える。
    終わり: spec と seam に人の OK がある。
-3. **チケット分割**。tracer bullet の縦切りで分ける(to-tickets 準拠)。git リポジトリなら issue にする。複数の issue を同時に走らせるなら [parallel/README.md](parallel/README.md) の運用に従う。git でない playground などは `<app>/docs/tickets/NN-<slug>.md` に 1 チケット 1 ファイルで置く。
-   終わり: チケットが縦切りで並び、順番が決まった。
+3. **チケット分割**。tracer bullet の縦切りで分ける(to-tickets 準拠)。切りすぎない。「終わったら何を見せられるか」の答えが 1 つになる単位でまとめ、分けるのは [references/ticket-size.md](references/ticket-size.md) の条件に当たるときだけにする。題材全体が 1 つのチケットで足りるなら、分割せず 1 つで進める。案を見せて、粒度(まとめるもの、分けるもの)をユーザーに確認する。git リポジトリなら issue にする。複数の issue を同時に走らせるなら [parallel/README.md](parallel/README.md) の運用に従う。git でない playground などは `<app>/docs/tickets/NN-<slug>.md` に 1 チケット 1 ファイルで置く。
+   終わり: チケットが縦切りで並び、粒度にユーザーの OK があり、順番が決まった。
 4. **テストレビュー**。チケットごとに、実装の前に test-review スキルを実行する。テストの深さが `full` のときのステップで、`light` と `none` の扱いは references/depth.md にある。
    終わり: 全ルールが採用になり、凍結ファイルがある。
 5. **UI 確認**。UI の深さが `detail` か `full` のとき、ui-check スキルを実行する。計画で構造を見た画面は、テストレビューで仕様が変わったものだけ再提示する。「直す」が出たら、仕様 → 影響するルールと例の再承認 → モックの再提示、を両方が採用になるまで繰り返す。
@@ -47,8 +57,10 @@ AI の自律実装(/goal)では、テストが事実上の完了条件になる�
 ## 参照
 
 - [references/depth.md](references/depth.md): 深さの 2 問、選択肢ごとのフロー、推奨の目安、ラウンドの組み方
+- [references/ticket-size.md](references/ticket-size.md): チケットをまとめる条件・分ける条件、その場で進める変更の条件と進め方
 - [references/mock-in-plan.md](references/mock-in-plan.md): 計画の grill にモックを埋め込む段階と見せ方
 - [references/pre-implementation-brief.md](references/pre-implementation-brief.md): 実装前の説明文書の中身と回答欄
 - [parallel/README.md](parallel/README.md): worktree と tmux で複数 issue を同時に進める運用(強制の仕組みは parallel/enforcement.md)
+- `docs/2026-11-28-research-ticket-size.md`(このリポジトリ): チケットを切りすぎない理由と、その場で進める基準の根拠
 - `docs/2026-10-17-research-test-review-and-mocks.md`(このリポジトリ): ルール単位のテストレビューと、早いモックの根拠
 - `~/projects/playground/reports/2026-09-21-test-review-research.md`: テストレビューが要る理由(reward hacking の実証データ)
