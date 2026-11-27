@@ -100,7 +100,8 @@ def artifacts(t: Topic, grill_base: str) -> list[dict]:
     for name, url, stage in record_links(t.records):
         if any(w in name.lower() for w in PREVIEW_WORDS):
             continue
-        by_stage.setdefault(stage if stage in stages.ORDER else "plan", []).append({"label": name, "url": url})
+        by_stage.setdefault(stage if stage in stages.ORDER else "plan", []).append(
+            {"label": name, "url": embed_url(url, grill_base)})
     for pr in sorted(t.prs, key=lambda p: p.get("number") or 0):
         if pr.get("url"):
             by_stage.setdefault("review", []).append({"label": f"PR #{pr.get('number')}", "url": str(pr["url"])})

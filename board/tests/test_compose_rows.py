@@ -74,3 +74,17 @@ def test_tabs_are_configured_projects_and_projects_with_work_in_progress():
     labels = [t["label"] for t in compose.compose(data)["tabs"]]
 
     assert labels == ["busy_app", "demo"]
+
+
+def test_r4_pr_without_issue_joins_the_record_of_its_branch():
+    from samples import pr
+
+    data = inputs(
+        records={("demo", "fix-readme"): [step("review", title="README の誤字を直す")]},
+        gh={"demo": {"issues": [], "prs": [pr(61, "chore/fix-readme")]}},
+    )
+
+    [row] = _tab(compose.compose(data), "demo")["rows"]
+
+    assert (row["topic"], row["title"], row["issue"]) == ("fix-readme", "README の誤字を直す", None)
+    assert {"label": "PR", "url": "https://example.invalid/demo/pull/61"} in row["links"]

@@ -169,4 +169,6 @@ def fallback_stage(t: Topic) -> str:
     if t.sheets and not open_pr and all(s.get("state") == "done" for s in t.sheets):
         return stages.DONE
     derived = evidence_stage(t)
-    return derived[0] if derived else stages.TODO
+    if derived:
+        return derived[0]
+    return "plan" if t.sheets else stages.TODO  # 種類の分からない質問票でも、出ていれば計画の段階とみなす

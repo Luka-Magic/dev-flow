@@ -14,6 +14,7 @@ from __future__ import annotations
 import time
 
 import detail
+import records
 import rows
 import sessions
 import stages
@@ -46,6 +47,8 @@ def _gather(data: dict) -> dict[tuple[str, str], Topic]:
             n = rows.pr_issue(p)
             if n is not None:
                 get(project, str(n), n).prs.append(p)
+            elif branch_topic(project, p, topics):
+                topics[(project, branch_topic(project, p, topics))].prs.append(p)
             elif str(p.get("state", "")).upper() == "OPEN" and isinstance(p.get("number"), int):
                 get(project, f"pr-{p['number']}", None).prs.append(p)
     grill = data.get("grill") or {}
@@ -64,6 +67,15 @@ def _gather(data: dict) -> dict[tuple[str, str], Topic]:
             project, key, n = where
             get(project, key, n).sessions.append(sessions.session_view(s, now))
     return topics
+
+
+def branch_topic(project: str, pr: dict, topics: dict[tuple[str, str], Topic]) -> str | None:
+    """番号のない PR を、ブランチ名と同じキーの記録に寄せる(chore/fix-readme → fix-readme)。"""
+    head = str(pr.get("headRefName") or "")
+    for candidate in (records.sanitize_key(head), records.sanitize_key(head.split("/", 1)[-1])):
+        if candidate and (project, candidate) in topics:
+            return candidate
+    return None
 
 
 def alive_sessions(data: dict) -> list[dict]:
