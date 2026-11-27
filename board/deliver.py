@@ -19,7 +19,7 @@ from sessions import pane_state, valid_pane
 MAX_TEXT = 2000
 COURIER_TIMEOUT = 180
 COURIER_TOOLS = "ListAgents,SendMessage"
-DEFAULT_COURIER_MODEL = "haiku"  # 1 行を届けるだけなので、いちばん小さいモデル
+DEFAULT_COURIER_MODEL = "sonnet"  # 既定のモデル(利用者の指定)。設定・環境変数で変えられる
 COURIER_PARALLEL = 2  # 同時に起動する配達係の上限(連打で claude -p が増えないように)
 COURIER_PROMPT = """あなたは配達係です。次の 1 件を届けたら終わります。
 1. ListAgents で、名前が「{name}」のセッションを探す。
@@ -67,7 +67,7 @@ class Courier:
                  model: str | None = None):
         self.runner = runner
         self.claude = claude or os.environ.get("BOARD_CLAUDE", "claude")
-        # モデル: 引数 → BOARD_COURIER_MODEL → haiku(server.py は環境変数 → 設定の courier_model の順で渡す)
+        # モデル: 引数 → BOARD_COURIER_MODEL → sonnet(server.py は環境変数 → 設定の courier_model の順で渡す)
         self.model = model or os.environ.get("BOARD_COURIER_MODEL") or DEFAULT_COURIER_MODEL
         self.timeout = timeout
         self._slots = threading.BoundedSemaphore(COURIER_PARALLEL)

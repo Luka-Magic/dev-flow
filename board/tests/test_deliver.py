@@ -82,16 +82,16 @@ def test_tmux_text_starting_with_dash_is_not_an_option():
     assert deliver.TmuxSender(runner=runner).send("%7:evil", "a").delivered is False
 
 
-def test_courier_uses_smallest_model_by_default_and_can_be_changed(monkeypatch):
+def test_courier_uses_sonnet_by_default_and_can_be_changed(monkeypatch):
     import deliver
 
     monkeypatch.delenv("BOARD_COURIER_MODEL", raising=False)
     default = deliver.Courier(claude="claude-fake").command("demo-5", "a")
-    chosen = deliver.Courier(claude="claude-fake", model="sonnet").command("demo-5", "a")
+    chosen = deliver.Courier(claude="claude-fake", model="haiku").command("demo-5", "a")
     monkeypatch.setenv("BOARD_COURIER_MODEL", "opus")
     by_env = deliver.Courier(claude="claude-fake").command("demo-5", "a")
 
-    assert default[default.index("--model") + 1] == "haiku"
-    assert chosen[chosen.index("--model") + 1] == "sonnet"
+    assert default[default.index("--model") + 1] == "sonnet"
+    assert chosen[chosen.index("--model") + 1] == "haiku"
     assert by_env[by_env.index("--model") + 1] == "opus"
     assert default[:2] == ["claude-fake", "-p"] and "--allowedTools" in default

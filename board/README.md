@@ -86,7 +86,7 @@ flow step 計画 --title "README の誤字を直す"      # issue の無い題�
   "wrapper_glob": "~/bin/*-parallel.sh",
   "allowed_hosts": ["<Tailscale の名前>"],
   "grill_url": "http://127.0.0.1:8787",
-  "courier_model": "haiku"
+  "courier_model": "sonnet"
 }
 ```
 
@@ -96,7 +96,7 @@ flow step 計画 --title "README の誤字を直す"      # issue の無い題�
 - `path` はセッションの作業フォルダからプロジェクトと題材を見分けるのと、`gh` を動かす場所に使う。
 - `hub` は承認を知らせる中心のセッションの名前。`repo` があれば `gh -R <repo>` で読む。
 - `github: false` なら `gh` を動かさない。
-- `courier_model` は配達係の `claude -p` に渡すモデル。既定は `haiku`(1 行を届けるだけなので、いちばん小さいモデル)。
+- `courier_model` は配達係の `claude -p` に渡すモデル(`--model`)。既定は `sonnet`。
   環境変数 `BOARD_COURIER_MODEL` があれば、そちらが優先する。
 
 環境変数: `BOARD_PORT` `BOARD_ROOT` `BOARD_CONFIG` `BOARD_GRILL_URL` `BOARD_SESSIONS_DIR`(既定 `~/.claude/sessions`)

@@ -259,7 +259,7 @@ def _hub_target(data: dict, project: str) -> dict | None:
 
 
 def courier_model(conf: dict) -> str | None:
-    """配達係のモデル: BOARD_COURIER_MODEL → 設定の courier_model → None(Courier の既定 haiku)。"""
+    """配達係のモデル: BOARD_COURIER_MODEL → 設定の courier_model → None(Courier の既定 sonnet)。"""
     value = os.environ.get("BOARD_COURIER_MODEL") or conf.get("courier_model")
     return value.strip() if isinstance(value, str) and value.strip() else None
 
