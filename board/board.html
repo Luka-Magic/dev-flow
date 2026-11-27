@@ -20,7 +20,7 @@
   --seg-done: #7d9a6c; --seg-now: var(--accent); --seg-off: #3a3730;
   --sans: "IBM Plex Sans JP", "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", "Meiryo", sans-serif;
   --mono: "IBM Plex Mono", "Consolas", "Menlo", monospace;
-  --top-h: 44px; --fs: 13.5px; --fs-s: 12px; --fs-xs: 11.5px;
+  --top-h: 44px; --right-min: 280px; --fs: 13.5px; --fs-s: 12px; --fs-xs: 11.5px;
 }
 * { box-sizing: border-box; margin: 0; }
 html, body { height: 100%; overflow-x: clip; }
@@ -43,7 +43,17 @@ button:disabled { cursor: not-allowed; color: var(--mute); }
 .meter .bar { width: 72px; height: 6px; border-radius: 3px; background: var(--seg-off); overflow: hidden; }
 .meter .fill { display: block; height: 100%; background: var(--accent); transform-origin: left; }
 .meter .pct { color: var(--text); }
-#others { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1 1 auto; }
+#others { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; min-width: 0; flex: 1 1 auto; position: relative; }
+#others[hidden], #limits-none[hidden], .meter[hidden] { display: none; }
+#others .count { flex: none; }
+#others .top { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+#others-more { font-size: var(--fs-s); border: 1px solid var(--line); border-radius: 6px; padding: 0 8px; line-height: 20px; background: none; color: var(--sub); cursor: pointer; flex: none; }
+#others-more:hover, #others-more[aria-expanded="true"] { color: var(--text); background: var(--hover); }
+#others-list { position: fixed; z-index: 40; top: calc(var(--top-h) - 4px); min-width: 260px; max-width: min(420px, calc(100vw - 32px)); max-height: 60dvh; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 0; list-style: none; font-size: var(--fs-s); color: var(--text); }
+#others-list[hidden] { display: none; }
+#others-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; padding: 4px 12px; }
+#others-list li span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#others-list .num { color: var(--sub); }
 #band .right { margin-left: auto; display: inline-flex; gap: 12px; align-items: center; white-space: nowrap; }
 .badge { font-size: var(--fs-xs); font-weight: 600; color: var(--on-accent); background: var(--accent); border-radius: 4px; padding: 0 6px; line-height: 18px; }
 .badge.zero { background: var(--line); color: var(--sub); }
@@ -102,9 +112,9 @@ td.c-ctx { width: 88px; }
 .btn.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 600; }
 .btn.primary:hover:not(:disabled) { background: var(--accent); opacity: 0.9; }
 #close { margin-left: auto; }
-.sh-body { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 340px; }
+.sh-body { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(var(--right-min), 340px); }
 .sh-left { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); }
-.sh-right { display: flex; flex-direction: column; min-height: 0; overflow: auto; padding: 12px 16px; gap: 16px; }
+.sh-right { display: flex; flex-direction: column; min-height: 0; min-width: var(--right-min); overflow: auto; padding: 12px 16px; gap: 16px; }
 .lab { font-size: var(--fs-xs); font-weight: 600; color: var(--sub); margin-bottom: 6px; }
 #focus { flex: 1 1 auto; min-height: 0; position: relative; display: flex; flex-direction: column; }
 #frame { flex: 1 1 auto; width: 100%; border: 0; background: var(--bg); }
@@ -123,7 +133,7 @@ td.c-ctx { width: 88px; }
 #result { font-size: var(--fs-s); color: var(--sub); min-height: 1.5em; }
 #result.err { color: var(--err); }
 #history, #artifacts { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-s); }
-#history li { display: grid; grid-template-columns: 44px 1fr; gap: 8px; }
+#history li { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 8px; }
 #history time { color: var(--mute); }
 #history li.none { display: block; }
 #artifacts li .st { color: var(--mute); font-size: var(--fs-xs); }
@@ -152,7 +162,7 @@ td.c-ctx { width: 88px; }
   #sheet { inset: 0; border-radius: 0; border: 0; }
   .sh-body { grid-template-columns: minmax(0, 1fr); overflow: auto; }
   .sh-left { border-right: 0; min-height: 70dvh; }
-  .sh-right { overflow: visible; border-top: 1px solid var(--line); }
+  .sh-right { overflow: visible; border-top: 1px solid var(--line); min-width: 0; }
 }
 @media (prefers-reduced-motion: no-preference) {
   .meter .fill { transition: transform 0.3s ease-out; }
@@ -169,7 +179,9 @@ td.c-ctx { width: 88px; }
   <b>dev-flow</b>
   <span class="meter" id="m5"><span>5 時間枠</span><span class="bar"><span class="fill"></span></span><span class="pct num"></span><span class="when"></span></span>
   <span class="meter" id="m7"><span>週</span><span class="bar"><span class="fill"></span></span><span class="pct num"></span><span class="when"></span></span>
-  <span id="others"></span>
+  <span id="limits-none" hidden>利用枠: 未取得</span>
+  <span id="others" hidden><span class="count"></span><span class="top"></span><button type="button" id="others-more" aria-expanded="false" aria-controls="others-list" hidden></button></span>
+  <ul id="others-list" aria-label="ほかのセッションの一覧" hidden></ul>
   <span class="right"><span class="lead">自分の番 <span class="badge num" id="turn-total">0</span></span><span id="updated" class="num" aria-live="polite"></span></span>
 </header>
 <nav id="tabs" role="tablist" aria-label="プロジェクト"></nav>
@@ -274,13 +286,39 @@ td.c-ctx { width: 88px; }
     m.querySelector(".pct").textContent = part ? part.pct + "%" : "なし";
     m.querySelector(".when").textContent = part && part.resets_text ? part.resets_text + " に戻る" : "";
   }
-  function renderBand() {
-    var lim = board.limits || {};
-    meter("m5", lim.five_hour); meter("m7", lim.seven_day);
-    var others = (board.other_sessions || []).map(function (s) {
-      return s.name + (s.context ? " " + s.context.pct + "%(" + s.context.age_min + " 分前)" : "");
+  function sessionText(s) { return s.name + " " + s.context.pct + "%(" + s.context.age_min + " 分前)"; }
+  function renderOthers() {
+    var o = board.other_sessions;  // 出すかどうか・並び・まとめ方は /api/board が決める
+    $("others").hidden = !o;
+    if (!o) { closeOthers(); return; }
+    $("others").querySelector(".count").textContent = "ほかのセッション " + o.count;
+    $("others").querySelector(".top").textContent = o.top.map(sessionText).join("、");
+    var more = $("others-more");
+    more.hidden = !o.rest_label;
+    more.textContent = o.rest_label || "";
+    var list = $("others-list");
+    list.textContent = "";
+    o.top.concat(o.rest).forEach(function (s) {
+      var li = el("li");
+      li.appendChild(el("span", "", s.name + (s.project ? "(" + s.project + ")" : "")));
+      li.appendChild(el("span", "num", s.context.pct + "%  " + s.context.age_min + " 分前"));
+      list.appendChild(li);
     });
-    $("others").textContent = others.length ? "ほかのセッション " + others.length + "  " + others.join("、") : "";
+    if (!o.rest_label) closeOthers();
+  }
+  function openOthers() {
+    var r = $("others-more").getBoundingClientRect();
+    var list = $("others-list");
+    list.hidden = false;
+    list.style.left = Math.max(16, Math.min(r.left, innerWidth - list.offsetWidth - 16)) + "px";
+    $("others-more").setAttribute("aria-expanded", "true");
+  }
+  function closeOthers() { $("others-list").hidden = true; $("others-more").setAttribute("aria-expanded", "false"); }
+  function renderBand() {
+    var lim = board.limits;
+    $("m5").hidden = !lim; $("m7").hidden = !lim; $("limits-none").hidden = !!lim;
+    if (lim) { meter("m5", lim.five_hour); meter("m7", lim.seven_day); }
+    renderOthers();
     var total = $("turn-total");
     total.textContent = String(board.my_turn || 0);
     total.classList.toggle("zero", !board.my_turn);
@@ -454,23 +492,59 @@ td.c-ctx { width: 88px; }
     });
     if (!art.children.length) art.appendChild(el("li", "none", "まだありません"));
   }
-  var lastFocus = null;
+  var BEHIND = ["band", "tabs", "bar2", "scroller"];  // 枠を開いている間は操作できなくする(Tab で外へ出ない)
+  function setBehindInert(on) {
+    BEHIND.forEach(function (id) { if (on) $(id).setAttribute("inert", ""); else $(id).removeAttribute("inert"); });
+  }
   function openSheet(id) {
     if (openId !== id) { $("msg").value = ""; $("result").textContent = ""; $("frame").dataset.manual = ""; frameUrl = ""; $("draft-actions").dataset.key = "-"; }
-    lastFocus = document.activeElement;
     openId = id;
+    closeOthers();
     $("sheet").hidden = false; $("scrim").hidden = false;
+    setBehindInert(true);
     renderSheet();
     $("close").focus();
     render();
   }
   function closeSheet() {
+    var was = openId;
     openId = null;
     $("sheet").hidden = true; $("scrim").hidden = true;
+    setBehindInert(false);
     $("frame").removeAttribute("src"); frameUrl = ""; $("frame").dataset.manual = "";
     render();
-    if (lastFocus && document.contains(lastFocus)) lastFocus.focus();
+    // 表は取り直しのたびに描き直すので、要素ではなく行の id で元の行を探してフォーカスを戻す
+    var tr = was ? document.querySelector('#rows tr[data-id="' + CSS.escape(was) + '"]') : null;
+    if (tr) tr.focus();
   }
+  function sheetFocusables() {
+    return Array.prototype.filter.call(
+      $("sheet").querySelectorAll("button, a[href], textarea, input, iframe:not([hidden]), [tabindex]:not([tabindex='-1'])"),
+      function (e) { return !e.disabled && e.offsetParent !== null; });
+  }
+  function trapTab(e) {
+    if (!openId || e.key !== "Tab") return;
+    var items = sheetFocusables();
+    if (!items.length) return;
+    var first = items[0], last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  }
+  // Esc で閉じる。日本語の変換中(isComposing)と、質問票の側が Esc を使ったとき(defaultPrevented)は閉じない
+  function escToClose(e) {
+    if (e.key === "Escape" && !e.isComposing && e.keyCode !== 229 && !e.defaultPrevented && openId) closeSheet();
+  }
+  // 質問票は board と同じ出所(/grill/ の中継)なので、中の文書にも Esc の受け口を付けられる。
+  // 外の出所のページは触れないので、そのときは「閉じる」ボタンで閉じる
+  $("frame").addEventListener("load", function () {
+    try {
+      var doc = $("frame").contentDocument;
+      if (doc && !doc.__boardEsc) {
+        doc.__boardEsc = true;
+        doc.addEventListener("keydown", function (e) { setTimeout(function () { escToClose(e); }, 0); });
+      }
+    } catch (err) { /* 別の出所: 受け口を付けない */ }
+  });
 
   // ---------------------------------------------------------------- 操作
   function post(path, body) {
@@ -546,7 +620,15 @@ td.c-ctx { width: 88px; }
   $("close").addEventListener("click", closeSheet);
   $("scrim").addEventListener("click", closeSheet);
   $("send").addEventListener("click", function () { var r = rowOf(openId); if (r) send(r, $("msg").value); });
-  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && openId) closeSheet(); });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && !$("others-list").hidden) { closeOthers(); $("others-more").focus(); return; }
+    trapTab(e);
+    escToClose(e);
+  });
+  $("others-more").addEventListener("click", function () { if ($("others-list").hidden) openOthers(); else closeOthers(); });
+  document.addEventListener("click", function (e) {
+    if (!$("others-list").hidden && !$("others").contains(e.target) && !$("others-list").contains(e.target)) closeOthers();
+  });
   window.addEventListener("message", function (e) {
     if (e.origin === location.origin && e.data && e.data.type === "grill-submitted") fetchBoard();
   });
