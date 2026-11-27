@@ -164,6 +164,24 @@ class Collector:
             return doc if isinstance(doc, dict) else {}
         return self.gh.get(projects)
 
+    def worktrees(self, projects: dict[str, dict]) -> dict[str, list[str]]:
+        """プロジェクトごとの作業ツリーのフォルダ名(子を始めるときの slug の初期値に使う)。"""
+        out: dict[str, list[str]] = {}
+        for name, conf in projects.items():
+            root = conf.get("path")
+            if not isinstance(root, str) or not root:
+                continue
+            base = Path(root)
+            folders: list[str] = []
+            for wt in (conf.get("worktree_dir"), str(base / ".claude" / "worktrees")):
+                if isinstance(wt, str) and Path(wt).is_dir():
+                    folders.extend(p.name for p in Path(wt).iterdir() if p.is_dir())
+            if base.parent.is_dir():  # 旧来の置き場所: リポジトリの隣の <名前>-<番号>-<slug>
+                prefix = base.name + "-"
+                folders.extend(p.name[len(prefix):] for p in base.parent.glob(prefix + "*") if p.is_dir())
+            out[name] = sorted(set(folders))
+        return out
+
     def inputs(self) -> dict:
         projects, conf = self.projects()
         return {
@@ -174,5 +192,6 @@ class Collector:
             "gh": self.github(projects),
             "sessions": self.sessions(),
             "usage": read_json_files(self.root / "usage"),
+            "worktrees": self.worktrees(projects),
             "config_error": conf.get("error"),
         }

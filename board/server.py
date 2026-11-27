@@ -22,6 +22,7 @@ import http.client
 import json
 import os
 import sys
+import threading
 import time
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -31,8 +32,10 @@ from urllib.parse import urlsplit
 
 import actions
 import compose
+import hub
 import records
 import sessions
+import start
 
 BIND = "127.0.0.1"
 DEFAULT_PORT = 8792
@@ -64,6 +67,9 @@ class App:
     grill_url: str = DEFAULT_GRILL_URL
     allowed_hosts: frozenset[str] = field(default_factory=frozenset)
     ui_comments_port: int | None = None  # ui-comments の専用サーバー。None なら差し込みも中継もしない
+    launcher: Any = None            # start.TmuxLauncher(テストと見本では偽物)。None なら始められない
+    starting: dict = field(default_factory=dict)  # {(project, "hub" | issue): 押した時刻}。二重に始めない
+    start_lock: threading.Lock = field(default_factory=threading.Lock)
 
 
 class HttpError(Exception):
@@ -178,7 +184,7 @@ class Handler(BaseHTTPRequestHandler):
         self.do_GET()
 
     def do_POST(self) -> None:
-        self._dispatch({"/api/send": self._post_send, "/api/approve": self._post_approve})
+        self._dispatch({"/api/send": self._post_send, "/api/approve": self._post_approve, "/api/start": self._post_start})
 
     def do_PATCH(self) -> None:
         self._dispatch({})  # ui-comments の中継だけ
@@ -198,7 +204,9 @@ class Handler(BaseHTTPRequestHandler):
         self._send(200, body, "text/html; charset=utf-8")
 
     def _inputs(self) -> dict:
-        return self.app.collector.inputs()
+        with self.app.start_lock:
+            starting = dict(self.app.starting)
+        return {**self.app.collector.inputs(), "starting": starting}
 
     def _board(self) -> None:
         self._json(compose.compose(self._inputs()))
@@ -226,6 +234,72 @@ class Handler(BaseHTTPRequestHandler):
             raise HttpError(400, "draft_id が正しくない")
         hub = _hub_target(self._inputs(), project)
         result = actions.approve(self.app.root, project, topic, draft_id, hub, self.app.courier, self.app.tmux)
+        self._json(result)
+
+    # ---------------------------------------------------------------- 開始
+
+    def _post_start(self) -> None:
+        """中心か子を始める。判定は /api/board と同じ合成の結果で行い、起動するのは設定と自動検出で決まったものだけ。"""
+        doc = self._read_json()
+        project = records.check_key(doc.get("project"), "プロジェクト名")
+        kind = doc.get("kind")
+        if kind not in ("hub", "child"):
+            raise HttpError(400, "kind は hub か child")
+        if self.app.launcher is None:
+            raise HttpError(409, "この board では起動できない")
+        data = self._inputs()
+        conf = data.get("projects", {}).get(project)
+        if conf is None:
+            raise HttpError(404, "そのプロジェクトの設定が無い")
+        board = compose.compose(data)
+        if kind == "hub":
+            self._start_hub(project, conf, board)
+        else:
+            self._start_child(project, conf, board, doc)
+
+    def _claim(self, key: tuple) -> None:
+        """押した直後の二重押しを断る(起動中の印を付ける)。"""
+        with self.app.start_lock:
+            started = self.app.starting.get(key)
+            if started is not None and time.time() - started < hub.STARTING_SECONDS:
+                raise HttpError(409, "起動中")
+            self.app.starting[key] = time.time()
+
+    def _release(self, key: tuple) -> None:
+        with self.app.start_lock:
+            self.app.starting.pop(key, None)
+
+    def _start_hub(self, project: str, conf: dict, board: dict) -> None:
+        tab = next((t for t in board.get("tabs", []) if t.get("project") == project), None)
+        view = (tab or {}).get("hub")
+        if view is None or view["start"] is None:
+            raise HttpError(409, "中心は動いている")
+        if not view["start"]["enabled"]:
+            raise HttpError(409, view["start"]["reason"] or "始められない")
+        plan = start.hub_plan(project, conf)
+        key = (project, "hub")
+        self._claim(key)
+        result = self.app.launcher.start_hub(plan).to_dict()
+        if not result["ok"]:
+            self._release(key)
+        actions.record_start(self.app.root, project, hub.HUB_KEY, "hub", result)
+        self._json({**result, "attach": view["attach"]})
+
+    def _start_child(self, project: str, conf: dict, board: dict, doc: dict) -> None:
+        arg = start.child_arg(doc.get("issue"), doc.get("slug"), doc.get("fix"))  # 値の検査が先
+        row = _find_row(board, project, str(doc["issue"]))
+        button = (row or {}).get("child_start")
+        if button is None:
+            raise HttpError(409, "この行では子を始められない(セッションが動いているか、完了している)")
+        if not button["enabled"]:
+            raise HttpError(409, button["reason"] or "始められない")
+        plan = start.child_plan(conf, doc["issue"], doc["slug"], doc["fix"])
+        key = (project, doc["issue"])
+        self._claim(key)
+        result = self.app.launcher.start_child(plan).to_dict()
+        if not result["ok"]:
+            self._release(key)  # 上限などで断られたら、もう一度押せる
+        actions.record_start(self.app.root, project, str(doc["issue"]), "child", result, arg)
         self._json(result)
 
     # ---------------------------------------------------------------- 質問票の中継
@@ -305,6 +379,9 @@ def _keys(doc: dict) -> tuple[str, str]:
 
 def _find_row(board: dict, project: str, topic: str) -> dict | None:
     for tab in board.get("tabs", []):
+        hub_row = (tab.get("hub") or {}).get("row")
+        if hub_row and hub_row["project"] == project and hub_row["topic"] == topic:
+            return hub_row
         for row in tab["rows"]:
             if row["project"] == project and row["topic"] == topic:
                 return row
@@ -346,6 +423,12 @@ def main() -> None:
         grill_url=grill_url,
         allowed_hosts=frozenset(str(h).strip().lower() for h in [*hosts, *env_hosts]),
     )
+    if os.environ.get("BOARD_DEMO_LAUNCH") == "1":  # 見本: 実物を起動しない偽物(demo.sh が付ける)
+        from demo_launcher import DemoLauncher
+
+        app.launcher = DemoLauncher(app.collector.sessions_dir, config.discover_projects(conf))
+    else:
+        app.launcher = start.TmuxLauncher()
     port = int(os.environ.get("BOARD_PORT") or DEFAULT_PORT)
     if os.environ.get("BOARD_UI_COMMENTS") == "1":  # ui-comments を差し込む(serve.sh / demo.sh が専用サーバーも起こす)
         app.ui_comments_port = ui_comments_port(os.environ.get("BOARD_UI_COMMENTS_PORT"), port)

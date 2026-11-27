@@ -61,3 +61,13 @@ def approve(root: Path, project: str, topic: str, draft_id: str, hub: dict | Non
 def notice_delivered(lines: list[dict], draft_id: str) -> bool:
     return any(x.get("kind") == "sent" and x.get("to") == "hub" and x.get("draft_id") == draft_id
                and x.get("delivered") for x in lines)
+
+
+def record_start(root: Path, project: str, topic: str, what: str, result: dict, arg: str | None = None) -> None:
+    """始めたことを記録に 1 件残す(誰が・いつ・結果)。失敗も残す。"""
+    entry = {"kind": "start", "what": what, "by": "board", "ok": bool(result.get("ok")), "code": result.get("code")}
+    if arg:
+        entry["arg"] = arg
+    if result.get("output"):
+        entry["output_tail"] = str(result["output"])[-500:]
+    records.append(root, project, topic, entry)
