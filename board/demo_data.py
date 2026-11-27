@@ -19,7 +19,7 @@ import time
 from pathlib import Path
 
 NOW = time.time()
-WORK = "/srv/demo-work"   # 架空の作業フォルダ(実在しなくてよい)
+WORK = "/srv/demo-work"   # 架空の作業フォルダ。main で一時フォルダの中に置き直す
 
 
 def ts(minutes_ago: float) -> str:
@@ -77,6 +77,8 @@ def records(root: Path) -> None:
         step("plan", 500, issue=8, title="タグで絞り込む"), step("spec", 300, issue=8),
         step("briefing", 50, issue=8),
         report("実装前の説明を出した", 45, issue=8, links={"実装前の説明": "http://127.0.0.1:8787/demo-brief-tags.html"})])
+    write_records(root, "notes_site", "12", [step("plan", 20, issue=12, title="検索を速くする")])
+    write_records(root, "old_tool", "3", [step("spec", 60, issue=3, title="設定の読み込みを直す")])
     write_records(root, "notes_site", "dark-theme", [
         step("implement", 90, title="暗い配色を足す"), {"ts": ts(12), "kind": "stuck", "text": "配色のトークンが 2 か所にある"}])
 
@@ -160,7 +162,7 @@ def sessions_and_usage(root: Path) -> None:
         sess("sample_app_hub", f"{WORK}/sample_app", "idle", 2),
         sess("notes-8", f"{WORK}/notes_site/.claude/worktrees/8-tags", "idle", 44),
         sess("scratch", f"{WORK}/scratch", "busy", 0),
-        sess("notes_site_hub", f"{WORK}/notes_site", "idle", 30),
+        sess("note-taking-ideas", f"{WORK}/ideas", "idle", 30),
         sess("reading-notes", f"{WORK}/reading", "idle", 120),
         sess("quick-fix", f"{WORK}/scratch2", "idle", 15),
         sess("no-usage", f"{WORK}/scratch3", "idle", 5),
@@ -168,7 +170,7 @@ def sessions_and_usage(root: Path) -> None:
     for d in docs:
         write_json(root / "sessions" / f"{d['sessionId']}.json", d)
     pcts = {"sample-35": 44, "sample-49": 72, "sample-52": 12, "sample-fix-readme": 21, "sample_app_hub": 35,
-            "notes-8": 58, "scratch": 71, "notes_site_hub": 18, "reading-notes": 64, "quick-fix": 9}
+            "notes-8": 58, "scratch": 71, "note-taking-ideas": 18, "reading-notes": 64, "quick-fix": 9}
     for i, (name, pct) in enumerate(pcts.items()):
         write_json(root / "devflow" / "usage" / f"demo-{name}.json", {
             "written_at": NOW - (i + 1) * 60, "session_id": f"demo-{name}",
@@ -181,9 +183,16 @@ def sessions_and_usage(root: Path) -> None:
 def config(root: Path) -> None:
     write_json(root / "config.json", {
         "wrapper_glob": str(root / "no-wrappers" / "*-parallel.sh"),
+        "hub_script_glob": str(root / "no-hub-scripts" / "*-hub.sh"),
+        # 起動の道具は架空のパス(demo.sh は起動の部品を偽物にするので、実際には動かさない)
         "projects": {
-            "sample_app": {"path": f"{WORK}/sample_app", "hub": "sample_app_hub", "repo": "example/sample_app"},
-            "notes_site": {"path": f"{WORK}/notes_site", "github": False},
+            "sample_app": {"path": f"{WORK}/sample_app", "hub": "sample_app_hub", "repo": "example/sample_app",
+                           "hub_command": ["/srv/demo-bin/sample_app-hub.sh"],
+                           "wrapper": "/srv/demo-bin/sample_app-parallel.sh"},
+            "notes_site": {"path": f"{WORK}/notes_site", "github": False, "hub": "notes_site_hub",
+                           "hub_command": ["/srv/demo-bin/notes_site-hub.sh"],
+                           "wrapper": "/srv/demo-bin/notes_site-parallel.sh"},
+            "old_tool": {"path": f"{WORK}/old_tool", "github": False, "hub": "old_tool_hub"},
         },
     })
 
@@ -193,6 +202,9 @@ def main(argv: list[str]) -> int:
         print(__doc__, file=sys.stderr)
         return 2
     root = Path(argv[0])
+    global WORK
+    WORK = str(root / "work")  # 作業ツリーの見本を置く(slug の初期値に使う)
+    (root / "work" / "notes_site" / ".claude" / "worktrees" / "12-faster-search").mkdir(parents=True)
     for build in (records, github, grill, sessions_and_usage, config):
         build(root)
     print(f"demo data: {root}")
