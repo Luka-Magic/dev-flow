@@ -42,14 +42,22 @@ def approve(root: Path, project: str, topic: str, draft_id: str, hub: dict | Non
         draft = next((x for x in reversed(lines) if x.get("kind") in DRAFT_KINDS and x.get("draft_id") == draft_id), None)
         if draft is None:
             raise ValueError(f"その案が記録に無い: {draft_id!r}")
-        if any(x.get("kind") == "approve" and x.get("draft_id") == draft_id for x in lines):
+        already = any(x.get("kind") == "approve" and x.get("draft_id") == draft_id for x in lines)
+        if already and notice_delivered(lines, draft_id):
             return {"ok": True, "already": True, "notified": None}
-        records.append(root, project, topic, {"kind": "approve", "draft_id": draft_id, "draft_kind": draft["kind"],
-                                              "title": str(draft.get("title", ""))})
+        if not already:
+            records.append(root, project, topic, {"kind": "approve", "draft_id": draft_id, "draft_kind": draft["kind"],
+                                                  "title": str(draft.get("title", ""))})
+    # 承認は 1 回分だけ。中心への知らせが届いていなければ、もう一度押したときに送り直す
     text = approval_message(project, topic, draft)
     if hub:
         notified = deliver(hub, text, courier, tmux).to_dict()
     else:
         notified = {"delivered": False, "via": None, "error": "中心のセッションが分からない"}
-    records.append(root, project, topic, {"kind": "sent", "to": "hub", "text": text, **notified})
-    return {"ok": True, "already": False, "notified": notified}
+    records.append(root, project, topic, {"kind": "sent", "to": "hub", "draft_id": draft_id, "text": text, **notified})
+    return {"ok": True, "already": already, "notified": notified}
+
+
+def notice_delivered(lines: list[dict], draft_id: str) -> bool:
+    return any(x.get("kind") == "sent" and x.get("to") == "hub" and x.get("draft_id") == draft_id
+               and x.get("delivered") for x in lines)

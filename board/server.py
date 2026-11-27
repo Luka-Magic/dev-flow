@@ -32,6 +32,7 @@ from urllib.parse import urlsplit
 import actions
 import compose
 import records
+import sessions
 
 BIND = "127.0.0.1"
 DEFAULT_PORT = 8792
@@ -189,7 +190,7 @@ class Handler(BaseHTTPRequestHandler):
         data = self._inputs()
         row = _find_row(compose.compose(data), project, topic)
         session = (row or {}).get("session")
-        target = {"name": session["name"], "tmux": session["tmux"]} if session else None
+        target = {"name": session.get("name"), "tmux": session.get("tmux")} if session else None
         result = actions.send_instruction(self.app.root, project, topic, target, text, self.app.courier, self.app.tmux)
         self._json({"ok": result["delivered"], **result})
 
@@ -197,7 +198,7 @@ class Handler(BaseHTTPRequestHandler):
         doc = self._read_json()
         project, topic = _keys(doc)
         draft_id = doc.get("draft_id")
-        if not isinstance(draft_id, str) or not records.KEY_RE.match(draft_id):
+        if not isinstance(draft_id, str) or not records.KEY_RE.fullmatch(draft_id):
             raise HttpError(400, "draft_id が正しくない")
         hub = _hub_target(self._inputs(), project)
         result = actions.approve(self.app.root, project, topic, draft_id, hub, self.app.courier, self.app.tmux)
@@ -253,9 +254,7 @@ def _hub_target(data: dict, project: str) -> dict | None:
     if not name:
         return None
     live = [s for s in data.get("sessions", []) if s.get("alive") and s.get("name") == name]
-    pane = None
-    if live and isinstance(live[0].get("tmux"), str) and "%" in live[0]["tmux"]:
-        pane = "%" + live[0]["tmux"].rsplit("%", 1)[1]
+    pane = sessions.tmux_target(live[0].get("tmux")) if live else None
     return {"name": name, "tmux": pane}
 
 

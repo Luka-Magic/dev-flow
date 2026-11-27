@@ -30,7 +30,7 @@ def _pick(doc: object, keys: tuple[str, ...]) -> dict:
 def extract(status: dict) -> dict | None:
     """ステータス行の JSON から、書き出す値だけを抜く。session_id が無ければ None。"""
     sid = status.get("session_id")
-    if not isinstance(sid, str) or not KEY_RE.match(sid):
+    if not isinstance(sid, str) or not KEY_RE.fullmatch(sid):
         return None
     limits = status.get("rate_limits") if isinstance(status.get("rate_limits"), dict) else {}
     return {
@@ -58,7 +58,7 @@ def write_atomic(folder: Path, name: str, doc: dict) -> None:
 def record_usage(raw: bytes) -> None:
     try:
         status = json.loads(raw)
-    except ValueError:
+    except (ValueError, RecursionError):
         return
     doc = extract(status) if isinstance(status, dict) else None
     if doc is None:
@@ -72,7 +72,10 @@ def record_usage(raw: bytes) -> None:
 def main(argv: list[str]) -> int:
     command = argv[1:] if argv and argv[0] == "--" else argv
     raw = sys.stdin.buffer.read()
-    record_usage(raw)
+    try:
+        record_usage(raw)
+    except Exception as exc:  # 書き出しの失敗でステータス行を止めない(理由は stderr に残す)
+        print(f"statusline_tee: 書き出しで失敗: {type(exc).__name__}: {exc}", file=sys.stderr)
     if not command:
         return 0
     try:

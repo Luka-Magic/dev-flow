@@ -19,6 +19,7 @@ from pathlib import Path
 
 import config
 import records
+import sessions
 
 GH_TTL = 60.0
 GH_TIMEOUT = 20
@@ -146,8 +147,9 @@ class Collector:
         for s in read_json_files(self.sessions_dir):
             alive = proc_alive(s.get("pid"), s.get("procStart"))
             pane = None
-            if alive and self.pane_reader and isinstance(s.get("tmux"), str) and "%" in s["tmux"]:
-                pane = self.pane_reader("%" + s["tmux"].rsplit("%", 1)[1])
+            target = sessions.tmux_target(s.get("tmux"))
+            if alive and self.pane_reader and target:
+                pane = self.pane_reader(target)
             out.append({**s, "alive": alive, "pane": pane})
         return out
 

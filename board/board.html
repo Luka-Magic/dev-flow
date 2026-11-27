@@ -251,7 +251,7 @@ td.c-ctx { width: 88px; }
     if (text != null) e.textContent = text;
     return e;
   }
-  function safeUrl(u) { return typeof u === "string" && /^(https?:\/\/|\/(?!\/))/.test(u) ? u : null; }
+  function safeUrl(u) { return typeof u === "string" && /^(https?:\/\/|\/(?![\/\\]))/.test(u) ? u : null; }
   function link(item) {
     var url = safeUrl(item.url);
     var a = el("a", "", item.label);
@@ -496,7 +496,9 @@ td.c-ctx { width: 88px; }
       var res = x.doc;
       if (x.status !== 200) { showResult("承認できなかった: " + (res.error || x.status), true); btn.disabled = false; return; }
       var n = res.notified;
-      showResult(res.already ? "承認は済んでいます" : "承認した。中心へ" + (n && n.delivered ? "知らせた" : "知らせられなかった: " + (n && n.error)), !res.already && !(n && n.delivered));
+      var head = res.already ? "承認は済んでいます" : "承認した";
+      if (!n) showResult(head);
+      else showResult(head + "。中心へ" + (n.delivered ? "知らせた" : "知らせられなかった(もう一度押すと送り直す): " + n.error), !n.delivered);
       fetchBoard();
     }).catch(function () { showResult("承認できなかった(サーバーにつながらない)", true); btn.disabled = false; });
   }

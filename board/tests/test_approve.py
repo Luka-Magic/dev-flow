@@ -31,3 +31,18 @@ def test_r9_approve_appends_once_and_notifies_hub_once(board_root: Path):
     [(to, text)] = courier.sent
     assert to == "demo_hub"
     assert "PR 案" in text and "feat: 書き出し" in text and "承認" in text
+
+
+def test_r9_second_approve_retries_only_the_failed_notice(board_root: Path):
+    _draft(board_root)
+    down, up = FakeCourier(ok=False), FakeCourier(ok=True)
+
+    first = actions.approve(board_root, "demo", "5", "abc123def456", {"name": "demo_hub", "tmux": None}, down, None)
+    second = actions.approve(board_root, "demo", "5", "abc123def456", HUB, up, FakeTmux())
+    third = actions.approve(board_root, "demo", "5", "abc123def456", HUB, up, FakeTmux())
+
+    assert first["notified"]["delivered"] is False
+    assert (second["already"], second["notified"]["delivered"]) == (True, True)
+    assert (third["already"], third["notified"]) == (True, None)
+    assert len([e for e in records.read(board_root, "demo", "5") if e["kind"] == "approve"]) == 1
+    assert len(up.sent) == 1

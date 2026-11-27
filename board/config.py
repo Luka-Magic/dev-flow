@@ -77,11 +77,11 @@ def discover_projects(config: dict, home: str | None = None) -> dict[str, dict]:
         except OSError:
             continue
         name = Path(conf.get("path", "")).name
-        if name and KEY_RE.match(name):
+        if name and KEY_RE.fullmatch(name):
             found[name] = conf
     projects = config.get("projects")
     for name, conf in (projects.items() if isinstance(projects, dict) else []):
-        if KEY_RE.match(str(name)) and isinstance(conf, dict):
+        if KEY_RE.fullmatch(str(name)) and isinstance(conf, dict):
             merged = {**found.get(name, {}), **conf}
             if isinstance(merged.get("path"), str):
                 merged["path"] = merged["path"].replace("~", home, 1) if merged["path"].startswith("~") else merged["path"]

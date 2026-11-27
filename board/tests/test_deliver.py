@@ -63,3 +63,20 @@ def test_courier_reads_delivered_line_from_claude_output():
     assert deliver.Courier(runner=runner, claude="claude-fake").send("demo-5", "a\nb") == deliver.Result(True, "courier", None)
     assert calls[0][:2] == ["claude-fake", "-p"] and "a b" in calls[0][2] and "「demo-5」" in calls[0][2]
     assert deliver.Courier(runner=failing).send("x", "y").error == "配達係: 宛先が無い"
+
+
+def test_tmux_text_starting_with_dash_is_not_an_option():
+    import subprocess
+
+    import deliver
+
+    calls = []
+
+    def runner(cmd, **kw):
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    deliver.TmuxSender(runner=runner).send("%7", "-X cancel")
+
+    assert calls[0] == ["tmux", "send-keys", "-t", "%7", "-l", "--", "-X cancel"]
+    assert deliver.TmuxSender(runner=runner).send("%7:evil", "a").delivered is False

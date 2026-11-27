@@ -9,15 +9,17 @@ from __future__ import annotations
 
 import os
 import subprocess
+import threading
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from typing import Protocol
 
-from sessions import pane_state
+from sessions import pane_state, valid_pane
 
 MAX_TEXT = 2000
 COURIER_TIMEOUT = 180
 COURIER_TOOLS = "ListAgents,SendMessage"
+COURIER_PARALLEL = 2  # 同時に起動する配達係の上限(連打で claude -p が増えないように)
 COURIER_PROMPT = """あなたは配達係です。次の 1 件を届けたら終わります。
 1. ListAgents で、名前が「{name}」のセッションを探す。
 2. 見つかったら、SendMessage でそのセッションに、下の本文をそのまま 1 回だけ送る。
@@ -64,16 +66,21 @@ class Courier:
         self.runner = runner
         self.claude = claude or os.environ.get("BOARD_CLAUDE", "claude")
         self.timeout = timeout
+        self._slots = threading.BoundedSemaphore(COURIER_PARALLEL)
 
     def command(self, name: str, text: str) -> list[str]:
         prompt = COURIER_PROMPT.format(name=name, text=clean_text(text))
         return [self.claude, "-p", prompt, "--allowedTools", COURIER_TOOLS]
 
     def send(self, target: str, text: str) -> Result:
+        if not self._slots.acquire(blocking=False):
+            return Result(False, None, "配達係: ほかの配達の途中")
         try:
             res = self.runner(self.command(target, text), capture_output=True, text=True, timeout=self.timeout)
         except (OSError, subprocess.TimeoutExpired) as exc:
             return Result(False, None, f"配達係を動かせない: {type(exc).__name__}")
+        finally:
+            self._slots.release()
         lines = [ln.strip() for ln in (res.stdout or "").splitlines() if ln.strip()]
         last = lines[-1] if lines else ""
         if res.returncode == 0 and last == "DELIVERED":
@@ -89,6 +96,8 @@ class TmuxSender:
         self.runner = runner
 
     def pane_text(self, target: str) -> str:
+        if not valid_pane(target):
+            return ""
         try:
             res = self.runner(["tmux", "capture-pane", "-p", "-t", target], capture_output=True, text=True, timeout=5)
         except (OSError, subprocess.TimeoutExpired):
@@ -96,8 +105,10 @@ class TmuxSender:
         return res.stdout if res.returncode == 0 else ""
 
     def send(self, target: str, text: str) -> Result:
-        try:
-            typed = self.runner(["tmux", "send-keys", "-t", target, "-l", clean_text(text)],
+        if not valid_pane(target):
+            return Result(False, None, f"tmux の宛先が正しくない: {target!r}")
+        try:  # -- のあとに置き、- で始まる文を tmux のオプションとして読ませない
+            typed = self.runner(["tmux", "send-keys", "-t", target, "-l", "--", clean_text(text)],
                                 capture_output=True, text=True, timeout=5)
             if typed.returncode != 0:
                 return Result(False, None, f"tmux: {(typed.stderr or '').strip()[:200]}")

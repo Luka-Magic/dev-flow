@@ -79,6 +79,14 @@ def tmux_target(value: object) -> str | None:
     return m.group(1) if m else None
 
 
+PANE_RE = re.compile(r"%\d{1,8}")
+
+
+def valid_pane(target: object) -> bool:
+    """tmux の宛先は %数字 だけを認める。"""
+    return isinstance(target, str) and PANE_RE.fullmatch(target) is not None
+
+
 def _under(path: PurePosixPath, base: PurePosixPath) -> PurePosixPath | None:
     try:
         return path.relative_to(base)
