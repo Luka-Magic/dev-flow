@@ -259,9 +259,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def _claim(self, key: tuple) -> None:
         """押した直後の二重押しを断る(起動中の印を付ける)。"""
+        ttl = hub.STARTING_SECONDS if key[1] == "hub" else start.CHILD_STARTING_SECONDS
         with self.app.start_lock:
             started = self.app.starting.get(key)
-            if started is not None and time.time() - started < hub.STARTING_SECONDS:
+            if started is not None and time.time() - started < ttl:
                 raise HttpError(409, "起動中")
             self.app.starting[key] = time.time()
 
@@ -277,12 +278,8 @@ class Handler(BaseHTTPRequestHandler):
         if not view["start"]["enabled"]:
             raise HttpError(409, view["start"]["reason"] or "始められない")
         plan = start.hub_plan(project, conf)
-        key = (project, "hub")
-        self._claim(key)
-        result = self.app.launcher.start_hub(plan).to_dict()
-        if not result["ok"]:
-            self._release(key)
-        actions.record_start(self.app.root, project, hub.HUB_KEY, "hub", result)
+        result = self._launch((project, "hub"), lambda: self.app.launcher.start_hub(plan))
+        self._record(project, hub.HUB_KEY, "hub", result)
         self._json({**result, "attach": view["attach"]})
 
     def _start_child(self, project: str, conf: dict, board: dict, doc: dict) -> None:
@@ -293,14 +290,33 @@ class Handler(BaseHTTPRequestHandler):
             raise HttpError(409, "この行では子を始められない(セッションが動いているか、完了している)")
         if not button["enabled"]:
             raise HttpError(409, button["reason"] or "始められない")
+        if button["slug"] and doc["slug"] != button["slug"]:  # 同じ issue に 2 つ目の作業ツリーを作らない
+            raise HttpError(409, f"#{doc['issue']} には作業ツリー {doc['issue']}-{button['slug']} がある。slug を {button['slug']} にする")
         plan = start.child_plan(conf, doc["issue"], doc["slug"], doc["fix"])
-        key = (project, doc["issue"])
-        self._claim(key)
-        result = self.app.launcher.start_child(plan).to_dict()
-        if not result["ok"]:
-            self._release(key)  # 上限などで断られたら、もう一度押せる
-        actions.record_start(self.app.root, project, str(doc["issue"]), "child", result, arg)
+        result = self._launch((project, doc["issue"]), lambda: self.app.launcher.start_child(plan))
+        self._record(project, str(doc["issue"]), "child", result, arg)
         self._json(result)
+
+    def _launch(self, key: tuple, run) -> dict:
+        """起動中の印を付けて動かす。確かに終わって失敗したとき(上限で断られたなど)だけ印を外し、もう一度押せるようにする。
+        途中で待つのをやめたとき(settled=False)は、何が作られたか分からないので印を残す。"""
+        self._claim(key)
+        try:
+            result = run().to_dict()
+        except Exception:
+            self._release(key)
+            raise
+        if not result["ok"] and result.get("settled", True):
+            self._release(key)
+        return result
+
+    def _record(self, project: str, topic: str, what: str, result: dict, arg: str | None = None) -> None:
+        """記録に失敗しても、起動の結果は返す(起動は済んでいるので、押し直させない)。"""
+        try:
+            actions.record_start(self.app.root, project, topic, what, result, arg)
+        except OSError as exc:
+            self.log_error("開始の記録を書けない: %s", exc)
+            result["record_error"] = "記録を書けなかった"
 
     # ---------------------------------------------------------------- 質問票の中継
 

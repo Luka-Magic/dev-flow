@@ -41,6 +41,8 @@ def test_wrapper_and_hub_script_are_found_and_hub_command_comes_from_config(tmp_
     (tmp_path / "bin").mkdir()
     (tmp_path / "bin" / "sample_app-parallel.sh").write_text(WRAPPER, encoding="utf-8")
     (tmp_path / "bin" / "sample_app-hub.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+    (tmp_path / "bin" / "sample_app-hub.sh").chmod(0o755)
+    (tmp_path / "bin" / "notes-hub.sh").write_text("#!/bin/sh\n", encoding="utf-8")  # 実行の権限が無い
     conf = {"wrapper_glob": str(tmp_path / "bin" / "*-parallel.sh"), "hub_script_glob": str(tmp_path / "bin" / "*-hub.sh"),
             "projects": {"notes": {"path": "~/notes", "hub_command": ["/opt/notes-hub", "--fast"]}}}
 

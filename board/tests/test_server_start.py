@@ -99,7 +99,7 @@ def test_child_refused_by_the_limit_shows_the_wrappers_reason(make, board_root: 
                     {"project": "demo", "kind": "child", "issue": 53, "slug": "column-width", "fix": True})[0]
 
     assert status == 200
-    assert json.loads(body) == {"ok": False, "code": 1, "output": refusal}
+    assert json.loads(body) == {"ok": False, "code": 1, "output": refusal, "settled": True}
     assert again == 200  # 断られたら、もう一度押せる
     entry = records.read(board_root, "demo", "53")[0]
     assert (entry["ok"], entry["arg"], entry["output_tail"]) == (False, "53-column-width@fix", refusal)
@@ -142,3 +142,30 @@ def test_send_to_hub_row_goes_to_the_hub(make, board_root: Path):
     assert status == 200
     assert app.courier.sent == [("demo_hub", "main を取り込んで")]
     assert records.read(board_root, "demo", "_hub")[-1]["kind"] == "sent"
+
+
+def test_child_whose_wrapper_did_not_finish_stays_starting(make):
+    from start import Result
+
+    launcher = FakeLauncher()
+    launcher.result = Result(False, None, "ラッパーが 180 秒で終わらなかった", settled=False)
+    app, port = make(launcher=launcher)
+    body = {"project": "demo", "kind": "child", "issue": 53, "slug": "column-width", "fix": False}
+
+    first = request(port, "POST", "/api/start", body)[0]
+    again = request(port, "POST", "/api/start", body)[0]
+
+    assert (first, again) == (200, 409)
+    assert len(launcher.children) == 1
+
+
+def test_child_with_an_existing_worktree_must_use_its_slug(make):
+    app, port = make()
+    app.collector.data["worktrees"] = {"demo": ["53-column-width"]}
+
+    other = request(port, "POST", "/api/start", {"project": "demo", "kind": "child", "issue": 53, "slug": "widths", "fix": False})
+    same = request(port, "POST", "/api/start", {"project": "demo", "kind": "child", "issue": 53, "slug": "column-width", "fix": False})
+
+    assert other[0] == 409 and "column-width" in json.loads(other[2])["error"]
+    assert same[0] == 200
+    assert [c.arg for c in app.launcher.children] == ["53-column-width"]

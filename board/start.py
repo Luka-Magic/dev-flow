@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import re
+import shutil
 import subprocess
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
@@ -21,6 +22,7 @@ SLUG_RE = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,38}[A-Za-z0-9])?")
 SESSION_RE = re.compile(r"[A-Za-z0-9_-]{1,64}")
 MAX_ISSUE = 999_999
 CHILD_TIMEOUT = 180
+CHILD_STARTING_SECONDS = hub.CHILD_STARTING_SECONDS  # 子の「起動中」の印は、ラッパーを待つ時間より長く持つ
 OUTPUT_TAIL_LINES = 20
 OUTPUT_TAIL_CHARS = 2000
 
@@ -47,6 +49,7 @@ class Result:
     ok: bool
     code: int | None
     output: str
+    settled: bool = True  # False: 途中で待つのをやめた(何が作られたか分からない)。「起動中」の印を外さない
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -58,20 +61,30 @@ def tail(text: str) -> str:
     return "\n".join(lines)[-OUTPUT_TAIL_CHARS:]
 
 
+def _tmux_safe(value: str, what: str) -> str:
+    """tmux が区切り(; で終わる引数)や書式(#{...}、#(...))として読む値・制御文字を拒む。"""
+    if value.rstrip().endswith(";") or "#" in value or any(ord(c) < 32 for c in value):
+        raise ValueError(f"{what}に tmux が別の意味に読む文字(; で終わる、#、制御文字)がある")
+    return value
+
+
 def hub_plan(project: str, conf: dict) -> HubPlan:
     """中心の起動の段取り。名前・コマンド・tmux セッションの検査に落ちたら ValueError。"""
     name = conf.get("hub")
-    if not isinstance(name, str) or not name.strip() or "\n" in name:
+    if not isinstance(name, str) or not name.strip():
         raise ValueError("中心の名前(PARALLEL_HUB)が分からない")
+    _tmux_safe(name, "中心の名前")
     argv = hub.hub_command(conf)
     if not argv:
         raise ValueError("起動スクリプトが無い")
     if argv[0].startswith("-"):
         raise ValueError("起動コマンドの先頭が - で始まっている")
+    for arg in argv:
+        _tmux_safe(arg, "起動コマンド")
     session = hub.tmux_session(project, conf)
     if not SESSION_RE.fullmatch(session):
         raise ValueError(f"tmux のセッション名に使えない文字がある: {session!r}")
-    cwd = str(conf.get("path") or Path.home())
+    cwd = _tmux_safe(str(conf.get("path") or Path.home()), "作業フォルダ")
     return HubPlan(session=session, window=hub.HUB_WINDOW, cwd=cwd, argv=(*argv, "--name", name))
 
 
@@ -96,13 +109,16 @@ def child_plan(conf: dict, issue: object, slug: object, fix: object) -> ChildPla
 class TmuxLauncher:
     """実物を起動する部品。runner を差し替えればテストで偽物にできる。"""
 
-    def __init__(self, runner: Runner = subprocess.run):
-        self.runner = runner
+    def __init__(self, runner: Runner = subprocess.run, which: Callable[[str], str | None] = shutil.which):
+        self.runner, self.which = runner, which
 
     def _run(self, cmd: list[str], timeout: int) -> subprocess.CompletedProcess:
         return self.runner(cmd, capture_output=True, text=True, timeout=timeout, check=False)
 
     def start_hub(self, plan: HubPlan) -> Result:
+        # tmux は窓を作れた時点で 0 を返すので、動かせない起動スクリプトは先に断る(窓がすぐ消えて「始めた」と誤る)
+        if not self.which(plan.argv[0]):
+            return Result(False, None, f"起動スクリプトを動かせない(見つからないか、実行の権限が無い): {plan.argv[0]}")
         target = f"={plan.session}"
         try:
             has = self._run(["tmux", "has-session", "-t", target], 5)
@@ -111,14 +127,21 @@ class TmuxLauncher:
             else:
                 cmd = ["tmux", "new-session", "-d", "-s", plan.session, "-n", plan.window, "-c", plan.cwd, *plan.argv]
             res = self._run(cmd, 10)
-        except (OSError, subprocess.TimeoutExpired) as exc:
+        except subprocess.TimeoutExpired:
+            return Result(False, None, "tmux が答えない", settled=False)
+        except OSError as exc:
             return Result(False, None, f"tmux を動かせない: {type(exc).__name__}")
         return Result(res.returncode == 0, res.returncode, tail((res.stdout or "") + (res.stderr or "")))
 
     def start_child(self, plan: ChildPlan) -> Result:
+        if not Path(plan.cwd).is_dir():  # 別のフォルダで動かして、ほかのリポジトリを触らないように
+            return Result(False, None, "作業フォルダが無い")
         try:
             res = self.runner([plan.wrapper, plan.arg], capture_output=True, text=True, timeout=CHILD_TIMEOUT,
-                              cwd=plan.cwd if Path(plan.cwd).is_dir() else None, check=False)
-        except (OSError, subprocess.TimeoutExpired) as exc:
+                              cwd=plan.cwd, check=False)
+        except subprocess.TimeoutExpired:
+            return Result(False, None, f"ラッパーが {CHILD_TIMEOUT} 秒で終わらなかった(作業ツリーと窓を確かめる)",
+                          settled=False)
+        except OSError as exc:
             return Result(False, None, f"ラッパーを動かせない: {type(exc).__name__}")
         return Result(res.returncode == 0, res.returncode, tail((res.stdout or "") + (res.stderr or "")))

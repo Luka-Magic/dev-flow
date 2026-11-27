@@ -105,7 +105,8 @@ def discover_projects(config: dict, home: str | None = None) -> dict[str, dict]:
 def _hub_scripts(config: dict, home: str) -> dict[str, str]:
     """中心の起動スクリプト(既定 ~/bin/*-hub.sh)。{名前の部分: パス}。"""
     pattern = str(config.get("hub_script_glob") or DEFAULT_HUB_SCRIPT_GLOB).replace("~", home, 1)
-    return {Path(p).name.removesuffix("-hub.sh"): p for p in sorted(glob.glob(pattern)) if Path(p).is_file()}
+    return {Path(p).name.removesuffix("-hub.sh"): p for p in sorted(glob.glob(pattern))
+            if Path(p).is_file() and os.access(p, os.X_OK)}  # 動かせないものは「無い」とみなす
 
 
 def _home(value: str, home: str) -> str:

@@ -35,9 +35,13 @@ def find_hub_session(name: str | None, alive: list[dict]) -> dict | None:
     return next((s for s in alive if s.get("name") == name), None)
 
 
+CHILD_STARTING_SECONDS = 210  # start.CHILD_STARTING_SECONDS と同じ(ラッパーを待つ 180 秒より長く)
+
+
 def is_starting(data: dict, project: str, now: float, what: object = "hub") -> bool:
     started = (data.get("starting") or {}).get((project, what))
-    return isinstance(started, (int, float)) and now - started < STARTING_SECONDS
+    ttl = STARTING_SECONDS if what == "hub" else CHILD_STARTING_SECONDS
+    return isinstance(started, (int, float)) and now - started < ttl
 
 
 def root_note(project: str, conf: dict, name: str | None, alive: list[dict], projects: dict) -> str | None:

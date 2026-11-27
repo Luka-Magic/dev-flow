@@ -598,6 +598,7 @@ td.c-ctx { width: 88px; }
       .then(function (x) {
         var d = x.doc;
         if (x.status !== 200) showStartOut("始められなかった: " + (d.error || x.status), true);
+        else if (d.code === null) showStartOut("始められなかった\n" + (d.output || ""), true);
         else showStartOut((d.ok ? "始めた(終了コード " : "断られた(終了コード ") + d.code + ")\n" + (d.output || ""), !d.ok);
       }).catch(function () { showStartOut("始められなかった(サーバーにつながらない)", true); })
       .then(function () { childBusy = false; fetchBoard(); });
