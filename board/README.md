@@ -38,6 +38,12 @@ board/demo.sh              # http://127.0.0.1:8793/ (Ctrl-C で止めて、見�
 board は 127.0.0.1 だけで待ち受ける。外から開くときは Tailscale の中継(`tailscale serve` など)を使い、
 その名前を設定ファイルの `allowed_hosts` に足す。足していない名前からの要求は 403 で断る(DNS の付け替えで読まれないため)。
 
+### 画面にコメントを付ける(ui-comments)
+
+`BOARD_UI_COMMENTS=1 board/serve.sh --restart`(見本は `BOARD_UI_COMMENTS=1 board/demo.sh`)で、board の画面に ui-comments のボタンを差し込み、専用サーバー(`board/ui_comments.sh`、127.0.0.1:4321、`BOARD_UI_COMMENTS_PORT` で変更)も起こす。無効のときは差し込みも中継もしない。
+コメントはこのリポジトリの `.ui-comments/`(git に入れない)に貯まり、`node ~/.claude/skills/ui-comments/src/cli.mjs list --dir <このリポジトリ>/.ui-comments` で読み、同じ CLI の `reply <番号> "<本文>" --dir <このリポジトリ>/.ui-comments` で返事をする。
+枠の中の質問票には差し込まない。tailnet の名前で開くときも、board が同じ入口の下で中継するので、設定の `allowed_hosts` だけ足せばよい。
+
 ## 記録: `flow` コマンド
 
 題材ごとの追記専用の記録(1 行 1 件の JSON)に 1 件足す。置き場所は `<BOARD_ROOT>/records/<プロジェクト>/<題材>.jsonl`。
@@ -97,7 +103,7 @@ flow step 計画 --title "README の誤字を直す"      # issue の無い題�
 - `hub` は承認を知らせる中心のセッションの名前。`repo` があれば `gh -R <repo>` で読む。
 - `github: false` なら `gh` を動かさない。
 - `courier_model` は配達係の `claude -p` に渡すモデル(`--model`)。既定は `sonnet`。
-  環境変数 `BOARD_COURIER_MODEL` があれば、そちらが優先する。
+  環境変数 `BOARD_COURIER_MODEL` があれば、そちらが優先する。名前の規則に合わない値は無視して既定に戻る。
 
 環境変数: `BOARD_PORT` `BOARD_ROOT` `BOARD_CONFIG` `BOARD_GRILL_URL` `BOARD_SESSIONS_DIR`(既定 `~/.claude/sessions`)
 `BOARD_ALLOWED_HOSTS`(カンマ区切り)。
@@ -169,5 +175,5 @@ uvx pytest -q board/tests
 | `deliver.py` `actions.py` | 配達(配達係・tmux)と承認 |
 | `statusline_tee.py` | 使用量の書き出し |
 | `board.html` | 画面(1 ファイル) |
-| `serve.sh` `demo.sh` `demo_data.py` `demo_grill.py` `courier_check.sh` | 起動・見本・配達の試験 |
+| `serve.sh` `demo.sh` `demo_data.py` `demo_grill.py` `courier_check.sh` `ui_comments.sh` | 起動・見本・配達の試験・ui-comments の専用サーバー |
 | `docs/skill-changes.md` | スキルの文面の変更案(子の報告を記録に移す) |

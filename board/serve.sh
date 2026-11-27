@@ -4,6 +4,7 @@
 #   board/serve.sh --restart   # 止めて起動し直す(server.py などを直したあと。board.html は再起動不要)
 #   board/serve.sh --stop      # 止める
 # ポートは BOARD_PORT(既定 8792)、記録の置き場所は BOARD_ROOT(既定 ~/.agent/devflow)。
+# BOARD_UI_COMMENTS=1 なら、画面に ui-comments を差し込み、専用サーバー(ui_comments.sh、既定 4321)も起こす。
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PORT="${BOARD_PORT:-8792}"
@@ -30,6 +31,8 @@ case "${1:-}" in
   "") ;;
   *) echo "使い方: $0 [--restart|--stop]" >&2; exit 2 ;;
 esac
+
+if [ "${BOARD_UI_COMMENTS:-}" = "1" ]; then "$HERE/ui_comments.sh" || exit 1; fi
 
 if is_board; then echo "already running: $URL"; exit 0; fi
 if [ -n "$(port_pid)" ]; then
