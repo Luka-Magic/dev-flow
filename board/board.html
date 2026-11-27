@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>dev-flow board</title>
+<meta name="description" content="dev-flow の進み具合を 1 画面で見る表。行を押すと、今見るもの・指示の欄・報告の履歴が開きます。">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23e27a52' stroke-width='2.4' stroke-linecap='round'><path d='M3 6h18M3 12h12M3 18h7'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* 色と書体は grill-visual の dashboard.html と同じトークン */
+:root {
+  --bg: #1c1a17; --panel: #24221e; --side: #201e1b; --line: #3a3730; --line2: #2e2b26;
+  --text: #ebe6dc; --sub: #b0a99b; --mute: #9a9487;
+  --accent: #e27a52; --on-accent: #1c1a17; --sel-bg: rgba(226, 122, 82, 0.13); --hover: #2b2924; --input: #191714; --err: #f08a7a;
+  --s-wait: #95b283; --s-review: #93b6cc; --s-done: #e0736b;
+  --field-line: #7a7468; --focus: #e27a52; --scrim: rgba(12, 11, 9, 0.6);
+  --seg-done: #7d9a6c; --seg-now: var(--accent); --seg-off: #3a3730;
+  --sans: "IBM Plex Sans JP", "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", "Meiryo", sans-serif;
+  --mono: "IBM Plex Mono", "Consolas", "Menlo", monospace;
+  --top-h: 44px; --right-min: 280px; --fs: 13.5px; --fs-s: 12px; --fs-xs: 11.5px;
+}
+* { box-sizing: border-box; margin: 0; }
+html, body { height: 100%; overflow-x: clip; }
+body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: var(--fs); line-height: 1.5; display: flex; flex-direction: column; height: 100dvh; }
+button, input, textarea { font: inherit; color: inherit; }
+a { color: var(--s-review); text-decoration: none; }
+a:hover { text-decoration: underline; }
+:where(button, a, input, textarea, iframe, [tabindex]):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+button:disabled { cursor: not-allowed; color: var(--mute); }
+.ic { width: 14px; height: 14px; flex: none; }
+.mono { font-family: var(--mono); }
+.num { font-variant-numeric: tabular-nums; }
+.lead { display: inline-flex; align-items: center; gap: 6px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ---- 上の帯 ---- */
+#band { display: flex; align-items: center; gap: 20px; padding: 0 16px; min-height: var(--top-h); background: var(--side); border-bottom: 1px solid var(--line); font-size: var(--fs-s); color: var(--sub); flex: none; overflow: hidden; }
+#band b { color: var(--text); font-size: 15px; font-weight: 600; white-space: nowrap; flex: none; }
+.meter { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.meter .bar { width: 72px; height: 6px; border-radius: 3px; background: var(--seg-off); overflow: hidden; }
+.meter .fill { display: block; height: 100%; background: var(--accent); transform-origin: left; }
+.meter .pct { color: var(--text); }
+#others { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; min-width: 0; flex: 1 1 auto; position: relative; }
+#others[hidden], #limits-none[hidden], .meter[hidden] { display: none; }
+#others .count { flex: none; }
+#others .top { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+#others-more { font-size: var(--fs-s); border: 1px solid var(--line); border-radius: 6px; padding: 0 8px; line-height: 20px; background: none; color: var(--sub); cursor: pointer; flex: none; }
+#others-more:hover, #others-more[aria-expanded="true"] { color: var(--text); background: var(--hover); }
+#others-list { position: fixed; z-index: 40; top: calc(var(--top-h) - 4px); min-width: 260px; max-width: min(420px, calc(100vw - 32px)); max-height: 60dvh; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 0; list-style: none; font-size: var(--fs-s); color: var(--text); }
+#others-list[hidden] { display: none; }
+#others-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; padding: 4px 12px; }
+#others-list li span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#others-list .num { color: var(--sub); }
+#band .right { margin-left: auto; display: inline-flex; gap: 12px; align-items: center; white-space: nowrap; }
+.badge { font-size: var(--fs-xs); font-weight: 600; color: var(--on-accent); background: var(--accent); border-radius: 4px; padding: 0 6px; line-height: 18px; }
+.badge.zero { background: var(--line); color: var(--sub); }
+#updated { color: var(--mute); }
+#updated.err { color: var(--err); }
+
+/* ---- タブと札 ---- */
+#tabs { display: flex; gap: 4px; padding: 8px 16px 0; border-bottom: 1px solid var(--line); overflow-x: auto; flex: none; }
+.tab { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border: 1px solid transparent; border-bottom: 0; border-radius: 6px 6px 0 0; background: none; cursor: pointer; color: var(--sub); white-space: nowrap; }
+.tab:hover { color: var(--text); background: var(--hover); }
+.tab[aria-selected="true"] { color: var(--text); background: var(--panel); border-color: var(--line); }
+#bar2 { display: flex; align-items: center; gap: 8px; padding: 8px 16px; flex: none; flex-wrap: wrap; }
+.chip { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-s); border: 1px solid var(--line); border-radius: 6px; padding: 2px 10px; background: none; cursor: pointer; color: var(--sub); }
+.chip:hover { background: var(--hover); color: var(--text); }
+.chip[aria-pressed="true"] { background: var(--sel-bg); color: var(--text); border-color: var(--accent); }
+.note { font-size: var(--fs-s); color: var(--err); }
+
+/* ---- 表 ---- */
+#scroller { flex: 1 1 auto; min-height: 0; overflow: auto; }
+table { width: 100%; border-collapse: collapse; }
+thead th { position: sticky; top: 0; z-index: 1; background: var(--bg); text-align: left; font-weight: 500; font-size: var(--fs-xs); color: var(--mute); padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+tbody tr { border-bottom: 1px solid var(--line2); cursor: pointer; }
+tbody tr:hover { background: var(--hover); }
+tbody tr:focus-visible { outline-offset: -2px; }
+tbody tr.done { color: var(--sub); }
+tbody tr[aria-current="true"] { background: var(--sel-bg); }
+td { padding: 8px; vertical-align: middle; }
+td.c-num { width: 48px; color: var(--mute); }
+td.c-title { min-width: 200px; max-width: 360px; }
+td.c-title span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+td.c-latest { max-width: 320px; color: var(--sub); }
+td.c-latest span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+td.c-ctx { width: 88px; }
+.stage { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.segs { display: inline-flex; gap: 3px; }
+.seg { width: 14px; height: 6px; border-radius: 2px; background: var(--seg-off); }
+.seg.on { background: var(--seg-done); }
+.seg.now { background: var(--seg-now); }
+.warn { color: var(--err); display: inline-flex; }
+.turn { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-xs); font-weight: 600; color: var(--on-accent); background: var(--accent); border-radius: 4px; padding: 0 8px; line-height: 20px; white-space: nowrap; }
+.ses { white-space: nowrap; font-size: var(--fs-s); }
+.ses.running { color: var(--s-wait); } .ses.idle { color: var(--sub); } .ses.confirm { color: var(--s-done); }
+.links { display: inline-flex; gap: 10px; white-space: nowrap; }
+.age { color: var(--mute); font-size: var(--fs-xs); }
+#empty { padding: 32px 16px; color: var(--mute); text-align: center; }
+
+/* ---- 重ねて開く枠 ---- */
+#scrim { position: fixed; inset: 0; background: var(--scrim); z-index: 20; }
+#scrim[hidden], #sheet[hidden] { display: none; }
+#sheet { position: fixed; z-index: 30; inset: 56px 64px 32px 64px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; display: flex; flex-direction: column; min-height: 0; }
+.sh-head { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.sh-head h2 { font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sh-head .meta { color: var(--sub); font-size: var(--fs-s); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.btn { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-s); border-radius: 6px; padding: 6px 14px; cursor: pointer; border: 1px solid var(--line); background: none; color: var(--text); white-space: nowrap; }
+.btn:hover:not(:disabled) { background: var(--hover); }
+.btn.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 600; }
+.btn.primary:hover:not(:disabled) { background: var(--accent); opacity: 0.9; }
+#close { margin-left: auto; }
+.sh-body { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(var(--right-min), 340px); }
+.sh-left { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); }
+.sh-right { display: flex; flex-direction: column; min-height: 0; min-width: var(--right-min); overflow: auto; padding: 12px 16px; gap: 16px; }
+.lab { font-size: var(--fs-xs); font-weight: 600; color: var(--sub); margin-bottom: 6px; }
+#focus { flex: 1 1 auto; min-height: 0; position: relative; display: flex; flex-direction: column; }
+#frame { flex: 1 1 auto; width: 100%; border: 0; background: var(--bg); }
+#frame[hidden], #focus-text[hidden] { display: none; }
+#focus-text { flex: 1 1 auto; overflow: auto; padding: 16px; }
+#focus-text h3 { font-size: 15px; font-weight: 600; margin-bottom: 8px; }
+#focus-text pre { white-space: pre-wrap; word-break: break-word; font-family: var(--mono); font-size: 12.5px; color: var(--text); background: var(--input); border: 1px solid var(--line); border-radius: 6px; padding: 12px; }
+#focus-text p { color: var(--sub); margin-bottom: 8px; }
+#mismatch { margin: 0 16px; padding: 8px 12px; border: 1px solid var(--err); border-radius: 6px; color: var(--err); font-size: var(--fs-s); }
+#mismatch[hidden] { display: none; }
+.cmd { border-top: 1px solid var(--line); padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
+.cmd .row { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
+#msg { flex: 1 1 240px; min-height: 40px; max-height: 160px; resize: vertical; background: var(--input); border: 1px solid var(--field-line); border-radius: 6px; padding: 8px 12px; color: var(--text); }
+#msg:focus { border-color: var(--accent); }
+#msg::placeholder { color: var(--mute); }
+#result { font-size: var(--fs-s); color: var(--sub); min-height: 1.5em; }
+#result.err { color: var(--err); }
+#history, #artifacts { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-s); }
+#history li { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 8px; }
+#history time { color: var(--mute); }
+#history li.none { display: block; }
+#artifacts li .st { color: var(--mute); font-size: var(--fs-xs); }
+#artifacts li .items { display: flex; flex-direction: column; gap: 2px; }
+.artifact { background: none; border: 0; padding: 0; cursor: pointer; text-align: left; color: var(--s-review); }
+.artifact:hover { text-decoration: underline; }
+.none { color: var(--mute); font-size: var(--fs-s); }
+
+/* ---- スマホ幅: 番号・題・段階・自分の番 だけ、枠は画面いっぱい ---- */
+@media (max-width: 760px) {
+  .c-ses, .c-ctx, .c-latest, .c-links { display: none; }
+  table { table-layout: fixed; }
+  th.c-num { width: 36px; } th.c-stage { width: 92px; } th.c-turn { width: 112px; }
+  td { padding: 8px 6px; }
+  td.c-title { min-width: 0; max-width: none; }
+  td.c-title span { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .seg { width: 8px; }
+  .stage { flex-direction: column; align-items: flex-start; gap: 2px; }
+  .stage .name { font-size: var(--fs-xs); color: var(--sub); }
+  .turn { max-width: 100%; white-space: normal; line-height: 1.4; padding: 2px 6px; }
+  .sh-head { flex-wrap: wrap; row-gap: 2px; }
+  .sh-head h2 { white-space: normal; flex: 1 1 calc(100% - 110px); }
+  .sh-head .meta { order: 3; flex: 1 1 100%; white-space: normal; }
+  #band { gap: 12px; flex-wrap: wrap; padding: 6px 16px; }
+  #others, #updated { display: none; }
+  #sheet { inset: 0; border-radius: 0; border: 0; }
+  .sh-body { grid-template-columns: minmax(0, 1fr); overflow: auto; }
+  .sh-left { border-right: 0; min-height: 70dvh; }
+  .sh-right { overflow: visible; border-top: 1px solid var(--line); min-width: 0; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .meter .fill { transition: transform 0.3s ease-out; }
+  #sheet:not([hidden]) { animation: rise 0.16s ease-out; }
+  @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
+</style>
+</head>
+<body>
+<header id="band" aria-label="利用枠とほかのセッション">
+  <b>dev-flow</b>
+  <span class="meter" id="m5"><span>5 時間枠</span><span class="bar"><span class="fill"></span></span><span class="pct num"></span><span class="when"></span></span>
+  <span class="meter" id="m7"><span>週</span><span class="bar"><span class="fill"></span></span><span class="pct num"></span><span class="when"></span></span>
+  <span id="limits-none" hidden>利用枠: 未取得</span>
+  <span id="others" hidden><span class="count"></span><span class="top"></span><button type="button" id="others-more" aria-expanded="false" aria-controls="others-list" hidden></button></span>
+  <ul id="others-list" aria-label="ほかのセッションの一覧" hidden></ul>
+  <span class="right"><span class="lead">自分の番 <span class="badge num" id="turn-total">0</span></span><span id="updated" class="num" aria-live="polite"></span></span>
+</header>
+<nav id="tabs" role="tablist" aria-label="プロジェクト"></nav>
+<div id="bar2">
+  <button type="button" class="chip" data-status="active" aria-pressed="true">進行中 <span class="num" data-count="active">0</span></button>
+  <button type="button" class="chip" data-status="todo" aria-pressed="true">未着手 <span class="num" data-count="todo">0</span></button>
+  <button type="button" class="chip" data-status="done" aria-pressed="true">完了 <span class="num" data-count="done">0</span></button>
+  <span class="note" id="notes"></span>
+</div>
+<main id="scroller">
+  <table>
+    <thead><tr>
+      <th class="c-num">#</th><th class="c-title">題</th><th class="c-stage">段階</th><th class="c-turn">自分の番</th>
+      <th class="c-ses">セッション</th><th class="c-ctx">コンテキスト</th><th class="c-latest">最新の報告</th><th class="c-links">リンク</th>
+    </tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+  <p id="empty" hidden>このタブには行がありません。</p>
+</main>
+
+<div id="scrim" hidden></div>
+<section id="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-title" hidden>
+  <div class="sh-head">
+    <h2 id="sh-title"></h2>
+    <span class="meta" id="sh-meta"></span>
+    <button type="button" class="btn" id="close"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>閉じる</button>
+  </div>
+  <div class="sh-body">
+    <div class="sh-left">
+      <div id="focus">
+        <iframe id="frame" title="今見るもの" hidden></iframe>
+        <div id="focus-text"></div>
+      </div>
+      <p id="mismatch" role="note" hidden></p>
+      <div class="cmd">
+        <label class="lab" for="msg">この題材のセッションに送る</label>
+        <div class="row">
+          <textarea id="msg" rows="2" placeholder="例: テストを先に直してから push して"></textarea>
+          <button type="button" class="btn" id="send"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z" /><path d="m21.854 2.147-10.94 10.939" /></svg>送る</button>
+        </div>
+        <div class="row" id="draft-actions"></div>
+        <p id="result" aria-live="polite"></p>
+      </div>
+    </div>
+    <div class="sh-right">
+      <section aria-labelledby="h-history"><h3 class="lab" id="h-history">報告の履歴(新しい順)</h3><ol id="history"></ol></section>
+      <section aria-labelledby="h-art"><h3 class="lab" id="h-art">成果物</h3><ul id="artifacts"></ul></section>
+    </div>
+  </div>
+</section>
+
+<script>
+(function () {
+  "use strict";
+  var POLL_MS = 3000;
+  var SVG = {
+    alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" /><path d="M12 9v4" /><path d="M12 17h.01" />',
+    bell: '<path d="M10.268 21a2 2 0 0 0 3.464 0" /><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326" />',
+    check: '<path d="M20 6 9 17l-5-5" />',
+    pencil: '<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" /><path d="m15 5 4 4" />',
+    activity: '<path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2" />',
+    pause: '<circle cx="12" cy="12" r="10" /><line x1="10" x2="10" y1="15" y2="9" /><line x1="14" x2="14" y1="15" y2="9" />'
+  };
+  var $ = function (id) { return document.getElementById(id); };
+  var board = null, currentTab = null, openId = null, scrolledTab = null, frameUrl = "", busy = false;
+  var show = { active: true, todo: true, done: true };
+
+  function icon(name) {
+    var s = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    s.setAttribute("viewBox", "0 0 24 24"); s.setAttribute("fill", "none"); s.setAttribute("stroke", "currentColor");
+    s.setAttribute("stroke-width", "2"); s.setAttribute("stroke-linecap", "round"); s.setAttribute("stroke-linejoin", "round");
+    s.setAttribute("class", "ic"); s.setAttribute("aria-hidden", "true");
+    s.innerHTML = SVG[name];  // 固定の図形だけ(サーバーの値は入れない)
+    return s;
+  }
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+  function safeUrl(u) { return typeof u === "string" && /^(https?:\/\/|\/(?![\/\\]))/.test(u) ? u : null; }
+  function link(item) {
+    var url = safeUrl(item.url);
+    var a = el("a", "", item.label);
+    if (url) { a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer"; }
+    a.addEventListener("click", function (e) { e.stopPropagation(); });
+    return a;
+  }
+  function tabKey(t) { return t.project === null ? "" : t.project; }
+  function tabOf(key) { return (board.tabs || []).filter(function (t) { return tabKey(t) === key; })[0] || null; }
+  function rowOf(id) {
+    var found = null;
+    (board.tabs || []).forEach(function (t) { t.rows.forEach(function (r) { if (r.id === id) found = r; }); });
+    return found;
+  }
+
+  // ---------------------------------------------------------------- 上の帯
+  function meter(id, part) {
+    var m = $(id);
+    m.querySelector(".fill").style.transform = "scaleX(" + (part ? Math.min(part.pct, 100) / 100 : 0) + ")";
+    m.querySelector(".pct").textContent = part ? part.pct + "%" : "未取得";
+    m.querySelector(".when").textContent = part && part.resets_text ? part.resets_text + " に戻る" : "";
+  }
+  function sessionText(s) { return s.name + " " + s.context.pct + "%(" + s.context.age_min + " 分前)"; }
+  function renderOthers() {
+    var o = board.other_sessions;  // 出すかどうか・並び・まとめ方は /api/board が決める
+    $("others").hidden = !o;
+    if (!o) { closeOthers(); return; }
+    $("others").querySelector(".count").textContent = "ほかのセッション " + o.count;
+    $("others").querySelector(".top").textContent = o.top.map(sessionText).join("、");
+    var more = $("others-more");
+    more.hidden = !o.rest_label;
+    more.textContent = o.rest_label || "";
+    var list = $("others-list");
+    list.textContent = "";
+    o.top.concat(o.rest).forEach(function (s) {
+      var li = el("li");
+      li.appendChild(el("span", "", s.name + (s.project ? "(" + s.project + ")" : "")));
+      li.appendChild(el("span", "num", s.context.pct + "%  " + s.context.age_min + " 分前"));
+      list.appendChild(li);
+    });
+    if (!o.rest_label) closeOthers();
+  }
+  function openOthers() {
+    var r = $("others-more").getBoundingClientRect();
+    var list = $("others-list");
+    list.hidden = false;
+    list.style.left = Math.max(16, Math.min(r.left, innerWidth - list.offsetWidth - 16)) + "px";
+    $("others-more").setAttribute("aria-expanded", "true");
+  }
+  function closeOthers() { $("others-list").hidden = true; $("others-more").setAttribute("aria-expanded", "false"); }
+  function renderBand() {
+    var lim = board.limits;
+    $("m5").hidden = !lim; $("m7").hidden = !lim; $("limits-none").hidden = !!lim;
+    if (lim) { meter("m5", lim.five_hour); meter("m7", lim.seven_day); }
+    renderOthers();
+    var total = $("turn-total");
+    total.textContent = String(board.my_turn || 0);
+    total.classList.toggle("zero", !board.my_turn);
+  }
+
+  // ---------------------------------------------------------------- タブ
+  function renderTabs() {
+    var nav = $("tabs");
+    nav.textContent = "";
+    (board.tabs || []).forEach(function (t) {
+      var b = el("button", "tab");
+      b.type = "button"; b.setAttribute("role", "tab");
+      b.setAttribute("aria-selected", String(tabKey(t) === currentTab));
+      b.appendChild(el("span", "", t.label));
+      if (t.my_turn) { var c = el("span", "badge num", String(t.my_turn)); c.setAttribute("aria-label", "自分の番 " + t.my_turn + " 件"); b.appendChild(c); }
+      b.addEventListener("click", function () { currentTab = tabKey(t); scrolledTab = null; render(); });
+      nav.appendChild(b);
+    });
+  }
+
+  // ---------------------------------------------------------------- 表
+  function stageCell(r) {
+    var wrap = el("span", "stage");
+    var segs = el("span", "segs");
+    segs.setAttribute("aria-hidden", "true");
+    for (var i = 1; i <= 8; i++) {
+      var cls = "seg";
+      if (r.stage_index > i || r.stage === "done") cls += " on";
+      else if (r.stage_index === i) cls += " now";
+      segs.appendChild(el("span", cls));
+    }
+    wrap.appendChild(segs);
+    wrap.appendChild(el("span", "name", r.stage_label));
+    if (r.mismatch) {
+      var w = el("span", "warn"); w.title = r.mismatch; w.appendChild(icon("alert"));
+      w.appendChild(el("span", "sr", r.mismatch)); wrap.appendChild(w);
+    }
+    return wrap;
+  }
+  function sessionCell(s) {
+    if (!s) return el("span", "ses idle", "");
+    var span = el("span", "ses lead " + s.state);
+    span.appendChild(icon(s.state === "running" ? "activity" : s.state === "confirm" ? "bell" : "pause"));
+    span.appendChild(el("span", "", s.label));
+    return span;
+  }
+  function renderRows(tab) {
+    var body = $("rows");
+    body.textContent = "";
+    var visible = tab.rows.filter(function (r) { return show[r.status]; });
+    visible.forEach(function (r) {
+      var tr = el("tr", r.status);
+      tr.tabIndex = 0;
+      tr.dataset.id = r.id;
+      if (r.id === openId) tr.setAttribute("aria-current", "true");
+      var cells = [
+        ["c-num num", r.issue == null ? "" : String(r.issue)], ["c-title", null], ["c-stage", null], ["c-turn", null],
+        ["c-ses", null], ["c-ctx num", null], ["c-latest", null], ["c-links", null]
+      ].map(function (c) { var td = el("td", c[0], c[1]); tr.appendChild(td); return td; });
+      cells[1].appendChild(el("span", "", r.title));
+      cells[2].appendChild(stageCell(r));
+      if (r.my_turn) { var t = el("span", "turn"); t.appendChild(icon("bell")); t.appendChild(el("span", "", r.my_turn)); cells[3].appendChild(t); }
+      cells[4].appendChild(sessionCell(r.session));
+      if (r.context) { cells[5].textContent = r.context.pct + "%"; cells[5].title = r.context.age_min + " 分前の値"; }
+      cells[6].appendChild(el("span", "", r.latest || ""));
+      var links = el("span", "links");
+      (r.links || []).forEach(function (l) { links.appendChild(link(l)); });
+      cells[7].appendChild(links);
+      tr.addEventListener("click", function () { openSheet(r.id); });
+      tr.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openSheet(r.id); } });
+      body.appendChild(tr);
+    });
+    $("empty").hidden = visible.length > 0;
+    Object.keys(show).forEach(function (k) { document.querySelector('[data-count="' + k + '"]').textContent = String(tab.counts[k] || 0); });
+    $("notes").textContent = (tab.notes || []).join(" ");
+  }
+  function scrollToFirstActive(tab) {
+    if (scrolledTab === currentTab) return;  // タブを開いた最初の 1 回だけ。あとは利用者のスクロールを保つ
+    scrolledTab = currentTab;
+    var first = tab.first_active == null ? null : tab.rows[tab.first_active];
+    var tr = first ? document.querySelector('#rows tr[data-id="' + CSS.escape(first.id) + '"]') : null;
+    var head = document.querySelector("thead").offsetHeight;
+    $("scroller").scrollTop = tr ? tr.offsetTop - head : 0;
+  }
+
+  // ---------------------------------------------------------------- 重ねて開く枠
+  function setFocus(r) {
+    var f = r.focus, box = $("focus-text"), frame = $("frame");
+    box.textContent = "";
+    if (f && f.type === "page" && safeUrl(f.url)) {
+      if (frameUrl !== f.url) { frame.src = f.url; frameUrl = f.url; }
+      frame.hidden = false; box.hidden = true;
+      return;
+    }
+    frame.hidden = true; box.hidden = false;
+    if (frameUrl) { frame.removeAttribute("src"); frameUrl = ""; }
+    if (f && f.type === "draft") {
+      box.appendChild(el("p", "", f.label + "(承認待ち)"));
+      box.appendChild(el("h3", "", f.title));
+      box.appendChild(el("pre", "", f.body));
+    } else if (f && f.type === "confirm") {
+      box.appendChild(el("p", "", "確認の選択肢で止まっています。答えるのはその窓で行います(この画面からは答えません)。"));
+      box.appendChild(el("pre", "", f.text));
+    } else {
+      box.appendChild(el("p", "", "今見るものはありません。右の成果物から開けます。"));
+    }
+  }
+  function openInFrame(url) {
+    var frame = $("frame");
+    frame.src = url; frameUrl = url; frame.hidden = false; $("focus-text").hidden = true;
+  }
+  function renderSheet() {
+    var r = openId && board ? rowOf(openId) : null;
+    if (!r) return;
+    $("sh-title").textContent = (r.project || "その他") + (r.issue != null ? " #" + r.issue : "") + "  " + r.title;
+    var meta = [r.stage_label];
+    if (r.session) meta.push(r.session.label);
+    if (r.context) meta.push("コンテキスト " + r.context.pct + "%(" + r.context.age_min + " 分前)");
+    $("sh-meta").textContent = meta.join(" / ");
+    if (!frameUrl || !r.focus || r.focus.url !== frameUrl) {
+      if (!($("frame").dataset.manual === "1")) setFocus(r);
+    }
+    $("mismatch").hidden = !r.mismatch;
+    $("mismatch").textContent = r.mismatch || "";
+    var canSend = r.project !== null;
+    $("send").disabled = !canSend;
+    $("msg").disabled = !canSend;
+    var acts = $("draft-actions");
+    var key = (r.drafts || []).map(function (d) { return d.draft_id; }).join(",");
+    if (acts.dataset.key !== key) {
+      acts.dataset.key = key; acts.textContent = "";
+      (r.drafts || []).forEach(function (d) {
+        var ok = el("button", "btn primary"); ok.type = "button";
+        ok.appendChild(icon("check")); ok.appendChild(el("span", "", d.label + "を承認"));
+        ok.addEventListener("click", function () { approve(r, d, ok); });
+        var fix = el("button", "btn"); fix.type = "button";
+        fix.appendChild(icon("pencil")); fix.appendChild(el("span", "", "直して"));
+        fix.addEventListener("click", function () {
+          var why = $("msg").value.trim();
+          if (!why) { showResult("直してほしい点を上の欄に書いてから押してください", true); $("msg").focus(); return; }
+          send(r, d.label + "を直して: " + why);
+        });
+        acts.appendChild(ok); acts.appendChild(fix);
+      });
+    }
+    var hist = $("history");
+    hist.textContent = "";
+    (r.history || []).forEach(function (h) {
+      var li = el("li");
+      var t = el("time", "num", (h.ts || "").slice(11, 16)); t.dateTime = h.ts || ""; t.title = h.ts || "";
+      li.appendChild(t); li.appendChild(el("span", "", h.text));
+      hist.appendChild(li);
+    });
+    if (!hist.children.length) hist.appendChild(el("li", "none", "まだ報告はありません"));
+    var art = $("artifacts");
+    art.textContent = "";
+    (r.artifacts || []).forEach(function (g) {
+      var li = el("li");
+      li.appendChild(el("span", "st", g.stage_label));
+      var items = el("span", "items");
+      g.items.forEach(function (it) {
+        var url = safeUrl(it.url);
+        if (url && url.indexOf("/grill/") === 0) {
+          var b = el("button", "artifact", it.label); b.type = "button";
+          b.addEventListener("click", function () { $("frame").dataset.manual = "1"; openInFrame(url); });
+          items.appendChild(b);
+        } else { items.appendChild(link(it)); }
+      });
+      li.appendChild(items);
+      art.appendChild(li);
+    });
+    if (!art.children.length) art.appendChild(el("li", "none", "まだありません"));
+  }
+  var BEHIND = ["band", "tabs", "bar2", "scroller"];  // 枠を開いている間は操作できなくする(Tab で外へ出ない)
+  function setBehindInert(on) {
+    BEHIND.forEach(function (id) { if (on) $(id).setAttribute("inert", ""); else $(id).removeAttribute("inert"); });
+  }
+  function openSheet(id) {
+    if (openId !== id) { $("msg").value = ""; $("result").textContent = ""; $("frame").dataset.manual = ""; frameUrl = ""; $("draft-actions").dataset.key = "-"; }
+    openId = id;
+    closeOthers();
+    $("sheet").hidden = false; $("scrim").hidden = false;
+    setBehindInert(true);
+    renderSheet();
+    $("close").focus();
+    render();
+  }
+  function closeSheet() {
+    var was = openId;
+    openId = null;
+    $("sheet").hidden = true; $("scrim").hidden = true;
+    setBehindInert(false);
+    $("frame").removeAttribute("src"); frameUrl = ""; $("frame").dataset.manual = "";
+    render();
+    // 表は取り直しのたびに描き直すので、要素ではなく行の id で元の行を探してフォーカスを戻す
+    var tr = was ? document.querySelector('#rows tr[data-id="' + CSS.escape(was) + '"]') : null;
+    if (tr) tr.focus();
+  }
+  function sheetFocusables() {
+    return Array.prototype.filter.call(
+      $("sheet").querySelectorAll("button, a[href], textarea, input, iframe:not([hidden]), [tabindex]:not([tabindex='-1'])"),
+      function (e) { return !e.disabled && e.getClientRects().length > 0; });
+  }
+  function trapTab(e) {
+    if (!openId || e.key !== "Tab") return;
+    var items = sheetFocusables();
+    if (!items.length) return;
+    var first = items[0], last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  }
+  // Esc で閉じる。日本語の変換中(isComposing)と、質問票の側が Esc を使ったとき(defaultPrevented)は閉じない
+  function escToClose(e) {
+    if (e.key === "Escape" && !e.isComposing && e.keyCode !== 229 && !e.defaultPrevented && openId) closeSheet();
+  }
+  // 文字を打つ欄か(ラジオやチェックボックスは文字が消えないので含めない)
+  function isTextEntry(t) {
+    if (!t || !t.closest) return false;
+    if (t.isContentEditable || t.closest("textarea, select")) return true;
+    var input = t.closest("input");
+    return !!input && !/^(radio|checkbox|button|submit|reset|range|color|file|image)$/i.test(input.type || "text");
+  }
+  // 質問票は board と同じ出所(/grill/ の中継)なので、中の文書にも Esc の受け口を付けられる。
+  // 外の出所のページは触れないので、そのときは「閉じる」ボタンで閉じる
+  $("frame").addEventListener("load", function () {
+    if (!frameUrl || frameUrl.indexOf("/grill/") !== 0) return;  // 受け口を付けるのは中継している質問票だけ
+    try {
+      var doc = $("frame").contentDocument;
+      if (doc && !doc.__boardEsc) {
+        doc.__boardEsc = true;
+        doc.addEventListener("keydown", function (e) {
+          // 質問票の入力欄(メモ・チャット・選択)で押した Esc と、拡大した画像を開いているときの Esc は質問票のもの。
+          // 枠を閉じると未送信の入力が消えるので、そのときは閉じない(欄の外へ出てから Esc、または「閉じる」)
+          var t = e.target;
+          if (isTextEntry(t)) return;
+          if (doc.querySelector("#lightbox.show")) return;  // grill-visual の render.py の拡大画像(id="lightbox"、開くと .show)
+          setTimeout(function () { escToClose(e); }, 0);
+        });
+      }
+    } catch (err) { /* 別の出所: 受け口を付けない */ }
+  });
+
+  // ---------------------------------------------------------------- 操作
+  function post(path, body) {
+    return fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+      .then(function (res) { return res.json().then(function (doc) { return { status: res.status, doc: doc }; }); });
+  }
+  function showResult(text, isErr) { var p = $("result"); p.textContent = text; p.classList.toggle("err", !!isErr); }
+  function send(r, text) {
+    if (busy) return;
+    if (!text.trim()) { showResult("送る文を書いてください", true); $("msg").focus(); return; }
+    busy = true; $("send").disabled = true;
+    post("/api/send", { project: r.project, topic: r.topic, text: text }).then(function (x) {
+      var d = x.doc;
+      if (d.delivered) { showResult("届いた(" + (d.via === "courier" ? "配達係" : "tmux") + ")"); $("msg").value = ""; }
+      else showResult("届かなかった: " + (d.error || x.status), true);
+      fetchBoard();
+    }).catch(function () { showResult("送れなかった(サーバーにつながらない)", true); })
+      .then(function () { busy = false; $("send").disabled = false; });
+  }
+  function approve(r, d, btn) {
+    btn.disabled = true;
+    post("/api/approve", { project: r.project, topic: r.topic, draft_id: d.draft_id }).then(function (x) {
+      var res = x.doc;
+      if (x.status !== 200) { showResult("承認できなかった: " + (res.error || x.status), true); btn.disabled = false; return; }
+      var n = res.notified;
+      var head = res.already ? "承認は済んでいます" : "承認した";
+      if (!n) showResult(head);
+      else showResult(head + "。中心へ" + (n.delivered ? "知らせた" : "知らせられなかった(もう一度押すと送り直す): " + n.error), !n.delivered);
+      fetchBoard();
+    }).catch(function () { showResult("承認できなかった(サーバーにつながらない)", true); btn.disabled = false; });
+  }
+
+  // ---------------------------------------------------------------- 取得と描画
+  function render() {
+    if (!board) return;
+    renderBand();
+    if (currentTab === null || !tabOf(currentTab)) {
+      var withTurn = (board.tabs || []).filter(function (t) { return t.my_turn; })[0];
+      var first = withTurn || (board.tabs || [])[0];
+      currentTab = first ? tabKey(first) : null;
+    }
+    renderTabs();
+    var tab = currentTab === null ? null : tabOf(currentTab);
+    if (!tab) { $("rows").textContent = ""; $("empty").hidden = false; return; }
+    renderRows(tab);
+    scrollToFirstActive(tab);
+  }
+  var lastText = "";
+  function fetchBoard() {
+    return fetch("/api/board", { cache: "no-store" }).then(function (res) {
+      if (!res.ok) throw new Error(String(res.status));
+      return res.text();
+    }).then(function (text) {
+      $("updated").classList.remove("err");
+      if (text !== lastText) {
+        lastText = text; board = JSON.parse(text);
+        render();
+        if (openId) renderSheet();
+      }
+      $("updated").textContent = (board.generated_at || "").slice(11, 19) + " 更新";
+    }).catch(function () {
+      $("updated").textContent = "取り直せない(サーバーが止まっている?)";
+      $("updated").classList.add("err");
+    });
+  }
+
+  document.querySelectorAll("#bar2 .chip").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var k = b.dataset.status; show[k] = !show[k];
+      b.setAttribute("aria-pressed", String(show[k])); render();
+    });
+  });
+  $("close").addEventListener("click", closeSheet);
+  $("scrim").addEventListener("click", closeSheet);
+  $("send").addEventListener("click", function () { var r = rowOf(openId); if (r) send(r, $("msg").value); });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && !$("others-list").hidden) { closeOthers(); $("others-more").focus(); return; }
+    trapTab(e);
+    escToClose(e);
+  });
+  $("others-more").addEventListener("click", function () { if ($("others-list").hidden) openOthers(); else closeOthers(); });
+  document.addEventListener("click", function (e) {
+    if (!$("others-list").hidden && !$("others").contains(e.target) && !$("others-list").contains(e.target)) closeOthers();
+  });
+  window.addEventListener("message", function (e) {
+    if (e.origin === location.origin && e.data && e.data.type === "grill-submitted") fetchBoard();
+  });
+  document.addEventListener("visibilitychange", function () { if (document.visibilityState === "visible") fetchBoard(); });
+  setInterval(function () { if (document.visibilityState === "visible") fetchBoard(); }, POLL_MS);
+  fetchBoard();
+})();
+</script>
+</body>
+</html>
