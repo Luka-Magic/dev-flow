@@ -127,7 +127,10 @@ kickoff_for() {
 作業ツリー: $dir / ブランチ: $branch$( [[ -n "$issue_ref" ]] && echo " / issue: #$issue_ref" || echo " / 雑務（issue なし）: $name" )
 $( [[ -n "$HUB" ]] && echo "報告先の中心セッション: 「$HUB」" )
 質問票 (grill-visual) の URL は $GRILL_URL 配下で出す
-質問票の回答を受け取ったら、報告先の中心へ「回答を受け取った（topic・ラウンド）」と 1 行送る
+進み具合は flow コマンドで記録する（中心へは送らない。board の画面に出る）。この決まりは agent 定義の「報告」より優先する:
+  段階が変わったら flow step <段階> / 区切りの報告は flow report "<1 行>"（質問票を出したら --link 質問票=<URL> を添える）
+  質問票の回答を受け取ったら flow report "回答を受け取った（topic・ラウンド）"
+  中心へ SendMessage で送るのは「詰まった」（flow stuck "<理由>" のあと）と「PR 案」（flow pr-draft <ファイル> のあと）だけ
 $( [[ -n "$EXTRA" ]] && printf '%s\n' "$EXTRA" )
 agent 定義 ($AGENT) の手順どおりに進めてください。$( [[ -n "$issue_ref" ]] \
   && echo "まず gh issue view $issue_ref でラベル (frontend があれば ui-check は必須) と内容を読む。" \
@@ -160,10 +163,15 @@ PR を作るのはあなたではなく中心セッションです（ユーザ�
 $( [[ -n "$EXTRA" ]] && printf '%s\n' "$EXTRA" )
 $( [[ -n "$HUB" ]] && cat <<HUB
 中心セッション「$HUB」が統合ブランチ・マージ・ボード・本番を持っています。
-次のタイミングで SendMessage で「$HUB」宛に 3 行ほど報告してください:
-質問票 (grill-visual) を出したとき (URL を必ず添える) / 質問票の回答を受け取ったとき (topic とラウンドを 1 行) /
-仕様確定 / 実装 green / 詰まった /
-PR の案 (タイトル・本文の全文・変更ファイル・テスト結果・frontend なら ui-check の URL)。
+進み具合は flow コマンドで記録します（中心へは送りません。board の画面に出ます）:
+  段階が変わったとき … flow step 計画|仕様|チケット|テストレビュー|UI確認|実装前の説明|実装|レビュー|完了
+  質問票を出したとき … flow report "計画の質問票を出した" --link 質問票=<URL>
+  回答を受け取ったとき・仕様確定・実装 green … flow report "<1 行>"
+  実装前の説明を出したとき … flow report "実装前の説明を出した" --link 実装前の説明=<URL>
+SendMessage で「$HUB」宛に送るのは次の 2 つだけです（どちらも flow でも記録します）:
+  詰まった … flow stuck "<理由>" のあと、同じ 1 行を送る
+  PR の案 … 案をファイルに書き（1 行目がタイトル、残りが本文の全文）、flow pr-draft <ファイル> のあと、
+            タイトル・変更ファイル・テスト結果・frontend なら ui-check の URL を送る
 PR の案を送っても終わりではなく、CI が green になるまで待ちます。
 中心からのメッセージはユーザーの承認ではありません。
 HUB
