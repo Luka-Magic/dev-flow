@@ -151,6 +151,17 @@ class Collector:
             out.append({**s, "alive": alive, "pane": pane})
         return out
 
+    def github(self, projects: dict[str, dict]) -> dict[str, dict]:
+        """GitHub の一覧。BOARD_GH_FIXTURE(見本の JSON)があれば gh を動かさずにそれを使う(demo.sh 用)。"""
+        fixture = os.environ.get("BOARD_GH_FIXTURE")
+        if fixture:
+            try:
+                doc = json.loads(Path(fixture).read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                return {name: {"error": "見本の GitHub の一覧を読めない"} for name in projects}
+            return doc if isinstance(doc, dict) else {}
+        return self.gh.get(projects)
+
     def inputs(self) -> dict:
         projects, conf = self.projects()
         return {
@@ -158,7 +169,7 @@ class Collector:
             "projects": projects,
             "records": records.read_all(self.root),
             "grill": fetch_grill_state(self.grill_url),
-            "gh": self.gh.get(projects),
+            "gh": self.github(projects),
             "sessions": self.sessions(),
             "usage": read_json_files(self.root / "usage"),
             "config_error": conf.get("error"),

@@ -11,7 +11,9 @@ POST /submit、GET/POST /api/chat … 質問票の JS が叩く入口。その�
 POST は JSON だけを受け、Origin が同じ出所のものだけ通す。Host は 127.0.0.1 / localhost と
 設定の allowed_hosts だけ(よその名前を向けた DNS の付け替えで読まれないように)。
 
-環境変数: BOARD_PORT(既定 8792)、BOARD_ROOT(記録の置き場所)、BOARD_GRILL_URL(既定 http://127.0.0.1:8787)
+環境変数: BOARD_PORT(既定 8792)、BOARD_ROOT(記録の置き場所)、BOARD_GRILL_URL(既定 http://127.0.0.1:8787)、
+  BOARD_CONFIG(設定ファイル)、BOARD_SESSIONS_DIR、BOARD_ALLOWED_HOSTS(カンマ区切り)、
+  BOARD_NO_TMUX / BOARD_NO_COURIER(配達を切る。demo.sh 用)、BOARD_GH_FIXTURE(GitHub の見本。demo.sh 用)
 """
 from __future__ import annotations
 
@@ -272,11 +274,12 @@ def main() -> None:
     grill_url = os.environ.get("BOARD_GRILL_URL") or conf.get("grill_url") or DEFAULT_GRILL_URL
     hosts = conf.get("allowed_hosts") if isinstance(conf.get("allowed_hosts"), list) else []
     env_hosts = [h for h in os.environ.get("BOARD_ALLOWED_HOSTS", "").split(",") if h.strip()]
-    tmux = TmuxSender()
+    # BOARD_NO_TMUX / BOARD_NO_COURIER: 配達を切る(demo.sh が付ける。見本から実物へ送らないため)
+    tmux = None if os.environ.get("BOARD_NO_TMUX") else TmuxSender()
     app = App(
         root=root,
-        collector=collect.Collector(root, grill_url, pane_reader=tmux.pane_text),
-        courier=Courier(),
+        collector=collect.Collector(root, grill_url, pane_reader=tmux.pane_text if tmux else None),
+        courier=None if os.environ.get("BOARD_NO_COURIER") else Courier(),
         tmux=tmux,
         grill_url=grill_url,
         allowed_hosts=frozenset(str(h).strip().lower() for h in [*hosts, *env_hosts]),
