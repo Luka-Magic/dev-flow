@@ -21,7 +21,7 @@ fi
 python3 "$HERE/demo_grill.py" "$DIR/grill" "$GRILL_PORT" & pids+=($!)
 BOARD_ROOT="$DIR/devflow" BOARD_SESSIONS_DIR="$DIR/sessions" BOARD_CONFIG="$DIR/config.json" \
 BOARD_GH_FIXTURE="$DIR/gh.json" BOARD_GRILL_URL="http://127.0.0.1:$GRILL_PORT" BOARD_PORT="$PORT" \
-BOARD_NO_TMUX=1 BOARD_NO_COURIER=1 BOARD_UI_COMMENTS_PROJECT="${BOARD_UI_COMMENTS_PROJECT:-devflow-board-demo}" \
+BOARD_NO_TMUX=1 BOARD_NO_COURIER=1 BOARD_DEMO_LAUNCH=1 BOARD_UI_COMMENTS_PROJECT="${BOARD_UI_COMMENTS_PROJECT:-devflow-board-demo}" \
   python3 "$HERE/server.py" & pids+=($!)
 sleep 1
 echo "demo: http://127.0.0.1:$PORT/ (見本データ: $DIR、Ctrl-C で止める)"

@@ -21,6 +21,7 @@ from records import KEY_RE
 
 DEFAULT_CONFIG = Path.home() / ".config" / "devflow-board" / "config.json"
 DEFAULT_WRAPPER_GLOB = "~/bin/*-parallel.sh"
+DEFAULT_HUB_SCRIPT_GLOB = "~/bin/*-hub.sh"
 EXPORT_RE = re.compile(r"^\s*export\s+(PARALLEL_[A-Z_]+)=(.*)$", re.MULTILINE)
 DEFAULT_IN_VAR_RE = re.compile(r"^\$\{[A-Za-z_][A-Za-z0-9_]*:-(.*)\}$")
 FIELDS = {"PARALLEL_ROOT": "path", "PARALLEL_HUB": "hub", "PARALLEL_SESSION": "tmux_session",
@@ -78,12 +79,36 @@ def discover_projects(config: dict, home: str | None = None) -> dict[str, dict]:
             continue
         name = Path(conf.get("path", "")).name
         if name and KEY_RE.fullmatch(name):
-            found[name] = conf
+            found[name] = {**conf, "wrapper": wrapper}
+    hub_scripts = _hub_scripts(config, home)
+    for name, conf in found.items():
+        prefix = Path(conf["wrapper"]).name.removesuffix("-parallel.sh")
+        script = hub_scripts.get(name) or hub_scripts.get(prefix)
+        if script:
+            found[name] = {**conf, "hub_script": script}
     projects = config.get("projects")
     for name, conf in (projects.items() if isinstance(projects, dict) else []):
         if KEY_RE.fullmatch(str(name)) and isinstance(conf, dict):
             merged = {**found.get(name, {}), **conf}
-            if isinstance(merged.get("path"), str):
-                merged["path"] = merged["path"].replace("~", home, 1) if merged["path"].startswith("~") else merged["path"]
+            if "hub_script" not in merged and hub_scripts.get(str(name)):
+                merged["hub_script"] = hub_scripts[str(name)]
+            for key in ("path", "wrapper", "worktree_dir"):
+                if isinstance(merged.get(key), str):
+                    merged[key] = _home(merged[key], home)
+            cmd = merged.get("hub_command")
+            if isinstance(cmd, list) and cmd and isinstance(cmd[0], str):  # 先頭(実行するファイル)だけ ~ を展開する
+                merged["hub_command"] = [_home(cmd[0], home), *cmd[1:]]
             found[name] = merged
     return found
+
+
+def _hub_scripts(config: dict, home: str) -> dict[str, str]:
+    """中心の起動スクリプト(既定 ~/bin/*-hub.sh)。{名前の部分: パス}。"""
+    pattern = str(config.get("hub_script_glob") or DEFAULT_HUB_SCRIPT_GLOB).replace("~", home, 1)
+    return {Path(p).name.removesuffix("-hub.sh"): p for p in sorted(glob.glob(pattern))
+            if Path(p).is_file() and os.access(p, os.X_OK)}  # 動かせないものは「無い」とみなす
+
+
+def _home(value: str, home: str) -> str:
+    """先頭の ~/ だけをホームに置き換える。"""
+    return home + value[1:] if value == "~" or value.startswith("~/") else value
